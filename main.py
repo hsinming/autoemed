@@ -55,8 +55,8 @@ def extract_emedical_numbers(file_path):
 
 
 if __name__ == "__main__":
-    filepath = "test.xlsx"  # 替換成你的試算表路徑
-    output = extract_emedical_numbers(filepath)
-    print(output)
+    # filepath = "test.xlsx"
+    # output = extract_emedical_numbers(filepath)
+    # print(output)
 
-    # login_to_emedical('e26748', 'Year*2025')
+    login_to_emedical('e26748', 'Year*2025')
