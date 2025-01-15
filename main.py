@@ -1,8 +1,28 @@
+#!/usr/bin/env python3
+# -*- coding:utf-8 -*-
+"""
+@author: Hsin-ming Chen
+@license: GPL
+@file: main.py
+@time: 2025/01/15
+@contact: hsinming.chen@gmail.com
+@software: PyCharm
+"""
+from typing import List
+from pathlib import Path
+from time import sleep
+from openpyxl import load_workbook
 import pandas as pd
 from helium import *
 
 
-def login_to_emedical(user_id, password):
+EXCEL_PATH = Path("test.xlsx")
+EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
+USER_ID = 'e26748'
+PASSWORD = 'Year*2025'
+
+
+def login_to_emedical(user_id: str, password: str):
     """
     Opens Chrome browser, navigates to the eMedical login page, and logs in with the provided credentials.
 
@@ -11,7 +31,7 @@ def login_to_emedical(user_id, password):
     password (str): The password for login.
     """
     # Start Chrome and navigate to the eMedical login page
-    start_chrome('https://www.emedical.immi.gov.au/eMedUI/eMedical')
+    driver = start_chrome('https://www.emedical.immi.gov.au/eMedUI/eMedical')
 
     # Enter the user ID and password
     write(user_id, into='User id')
@@ -23,8 +43,37 @@ def login_to_emedical(user_id, password):
     # Optional: Add a wait or check to confirm successful login
     wait_until(Text('Logout').exists, timeout_secs=10)
 
+    return driver
 
-def extract_emedical_numbers(file_path):
+
+def extract_all_eMedical_no_black_text(file_path) -> List[str]:
+    # Load workbook
+    workbook = load_workbook(file_path, data_only=True)
+    eMedical_no_list = []
+
+    # Iterate over all sheets
+    for sheet_name in workbook.sheetnames:
+        sheet = workbook[sheet_name]
+        # Find the header "eMedical No."
+        for col in sheet.iter_cols():
+            for cell in col:
+                if cell.value == "eMedical No.":
+                    # Start collecting values from the next row below the header
+                    row_idx = cell.row + 1
+                    while row_idx <= sheet.max_row:
+                        value_cell = sheet.cell(row=row_idx, column=cell.column)
+                        # Check if the cell has text, no fill color, and black text color
+                        if value_cell.value:
+                            fill_color = value_cell.fill.start_color.index
+                            font_color = value_cell.font.color.rgb if value_cell.font.color else None
+                            if fill_color == '00000000' and (font_color == '00000000' or font_color is None):
+                                eMedical_no_list.append(value_cell.value)
+                        row_idx += 1
+
+    return eMedical_no_list
+
+
+def extract_emedical_numbers(file_path) -> List:
     """
     Extracts all eMedical No. from an Excel file and returns them as a list.
 
@@ -52,11 +101,57 @@ def extract_emedical_numbers(file_path):
     return all_emedical_numbers
 
 
+def process_australia(emed_no: str):
+    click(RadioButton('Using Health Case Identifier'))
+    write(emed_no, 'ID')
+    click(Button('Search'))
+    if not Text('Your search returned no results.').exists():
+        click(Text('All'))
+        click(Button('Manage Case'))
+        wait_until(Text('Pre exam: Health case details').exists)
+        click(Button('Next'))
+        wait_until(Text('Pre exam: Manage Photo').exists)
+        sleep(3)  # wait loading photo
+        click(Button('Next'))
+        wait_until(Text('Pre exam: Confirm identity').exists)
+        click(Button('Next'))
+        wait_until(Text('All Exams: All exams summary').exists)
+        click(Button('Close'))
+
+
+def process_canada(emed_no: str):
+    pass
+
+
+def process_new_zealand(emed_no: str):
+    pass
+
+
+def process_united_states(emed_no: str):
+    pass
 
 
 if __name__ == "__main__":
-    # filepath = "test.xlsx"
-    # output = extract_emedical_numbers(filepath)
-    # print(output)
+    # Start Chrome and navigate to the eMedical login page
+    driver = start_chrome(EMEDICAL_URL)
+    write(USER_ID, into='User id')
+    write(PASSWORD, into='Password')
+    click('Logon')
+    wait_until(Text('Case search').exists, timeout_secs=10)
 
-    login_to_emedical('e26748', 'Year*2025')
+    emedical_number_list = extract_all_eMedical_no_black_text(EXCEL_PATH)
+    # emed_no = emedical_number_list[3]
+    # print(emedical_no)
+
+    for emed_no in emedical_number_list:
+        if emed_no.startswith(('HAP', 'TRN')):
+            process_australia(emed_no)
+        elif emed_no.startswith(('NZER', 'NZHR')):
+            process_new_zealand(emed_no)
+        elif emed_no.startswith(('IME', 'UMI', 'UCI')):
+            process_canada(emed_no)
+        elif emed_no.startswith('CEABC'):
+            process_united_states(emed_no)
+        else:
+            pass
+
