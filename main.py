@@ -171,12 +171,13 @@ if __name__ == "__main__":
     # emed_no = emedical_number_list[3]
     # print(emedical_no)
 
-    for emed_no in emedical_number_list:
+    for emed_no in emedical_number_list[:3]:
         if emed_no.startswith(('HAP', 'TRN')):
             process_australia(emed_no)
             # pass
         elif emed_no.startswith(('NZER', 'NZHR')):
-            process_new_zealand(emed_no)
+            # process_new_zealand(emed_no)
+            pass
         elif emed_no.startswith(('IME', 'UMI', 'UCI')):
             # process_canada(emed_no)
             pass
