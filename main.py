@@ -120,7 +120,21 @@ def process_australia(emed_no: str):
 
 
 def process_canada(emed_no: str):
-    pass
+    click(RadioButton('Using Health Case Identifier'))
+    write(emed_no, 'ID')
+    click(Button('Search'))
+    if not Text('Your search returned no results.').exists():
+        click(Text('All'))
+        click(Button('Manage Case'))
+        wait_until(Text('Pre exam: Health case details').exists)
+        click(Button('Next'))
+        wait_until(Text('Pre exam: Manage Photo').exists)
+        sleep(3)  # wait loading photo
+        click(Button('Next'))
+        wait_until(Text('Pre exam: Confirm identity').exists)
+        click(Button('Next'))
+        wait_until(Text('All Exams: All exams summary').exists)
+        click(Button('Close'))
 
 
 def process_new_zealand(emed_no: str):
@@ -128,7 +142,21 @@ def process_new_zealand(emed_no: str):
 
 
 def process_united_states(emed_no: str):
-    pass
+    click(RadioButton('Using Health Case Identifier'))
+    write(emed_no, 'ID')
+    click(Button('Search'))
+    if not Text('Your search returned no results.').exists():
+        click(Text('All'))
+        click(Button('Manage Case'))
+        wait_until(Text('Pre exam: Health case details').exists)
+        click(Button('Next'))
+        wait_until(Text('Pre exam: Manage Photo').exists)
+        sleep(3)  # wait loading photo
+        click(Button('Next'))
+        wait_until(Text('Pre exam: Confirm identity').exists)
+        click(Button('Next'))
+        wait_until(Text('All Exams: All exams summary').exists)
+        click(Button('Close'))
 
 
 if __name__ == "__main__":
@@ -146,12 +174,15 @@ if __name__ == "__main__":
     for emed_no in emedical_number_list:
         if emed_no.startswith(('HAP', 'TRN')):
             process_australia(emed_no)
+            # pass
         elif emed_no.startswith(('NZER', 'NZHR')):
             process_new_zealand(emed_no)
         elif emed_no.startswith(('IME', 'UMI', 'UCI')):
-            process_canada(emed_no)
-        elif emed_no.startswith('CEABC'):
-            process_united_states(emed_no)
+            # process_canada(emed_no)
+            pass
+        elif emed_no.startswith('CEAC'):
+            # process_united_states(emed_no)
+            pass
         else:
             pass
 
