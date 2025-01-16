@@ -31,7 +31,7 @@ def login_to_emedical(user_id: str, password: str):
     password (str): The password for login.
     """
     # Start Chrome and navigate to the eMedical login page
-    driver = start_chrome('https://www.emedical.immi.gov.au/eMedUI/eMedical')
+    start_chrome('https://www.emedical.immi.gov.au/eMedUI/eMedical')
 
     # Enter the user ID and password
     write(user_id, into='User id')
@@ -42,8 +42,6 @@ def login_to_emedical(user_id: str, password: str):
 
     # Optional: Add a wait or check to confirm successful login
     wait_until(Text('Logout').exists, timeout_secs=10)
-
-    return driver
 
 
 def extract_all_eMedical_no_black_text(file_path) -> List[str]:
@@ -103,7 +101,7 @@ def extract_emedical_numbers(file_path) -> List:
 
 def process_australia(emed_no: str):
     click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, 'ID')
+    write(emed_no, TextField('ID'))
     click(Button('Search'))
     if not Text('Your search returned no results.').exists():
         click(Text('All'))
@@ -162,16 +160,16 @@ def process_united_states(emed_no: str):
 if __name__ == "__main__":
     # Start Chrome and navigate to the eMedical login page
     driver = start_chrome(EMEDICAL_URL)
-    write(USER_ID, into='User id')
-    write(PASSWORD, into='Password')
-    click('Logon')
+    write(USER_ID, into=TextField('User id'))
+    write(PASSWORD, into=TextField('Password'))
+    click(Button('Logon'))
     wait_until(Text('Case search').exists, timeout_secs=10)
 
     emedical_number_list = extract_all_eMedical_no_black_text(EXCEL_PATH)
     # emed_no = emedical_number_list[3]
-    # print(emedical_no)
+    # print(emed_no)
 
-    for emed_no in emedical_number_list[:3]:
+    for emed_no in emedical_number_list[:1]:
         if emed_no.startswith(('HAP', 'TRN')):
             process_australia(emed_no)
             # pass
