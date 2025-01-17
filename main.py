@@ -114,6 +114,26 @@ def process_australia(emed_no: str):
         wait_until(Text('Pre exam: Confirm identity').exists)
         click(Button('Next'))
         wait_until(Text('All Exams: All exams summary').exists)
+
+        click(Text('502 Chest X-Ray Examination', below=Text('Current exams')))
+        click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
+        click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
+        click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
+        click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
+        click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
+        click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
+        click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
+        click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+        click(RadioButton('A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
+        click(CheckBox('I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+        click(Button('Submit Exam'))
+        Alert().accept()
+        wait_until(Text('502 Chest X-ray Examination has been successfully submitted.').exists)
+
         click(Button('Close'))
 
 
@@ -166,12 +186,12 @@ if __name__ == "__main__":
     wait_until(Text('Case search').exists, timeout_secs=10)
 
     emedical_number_list = extract_all_eMedical_no_black_text(EXCEL_PATH)
-    print(emedical_number_list)
+    # print(emedical_number_list)
 
-    for emed_no in emedical_number_list[:1]:
+    for emed_no in emedical_number_list[1:2]:
         if emed_no.startswith(('HAP', 'TRN')):
-            # process_australia(emed_no)
-            pass
+            process_australia(emed_no)
+            # pass
         elif emed_no.startswith(('NZER', 'NZHR')):
             # process_new_zealand(emed_no)
             pass
