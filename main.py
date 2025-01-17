@@ -16,7 +16,7 @@ import pandas as pd
 from helium import *
 
 
-EXCEL_PATH = Path("test.xlsx")
+EXCEL_PATH = Path("test2.xlsx")
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
 USER_ID = 'e26748'
 PASSWORD = 'Year*2025'
@@ -166,13 +166,12 @@ if __name__ == "__main__":
     wait_until(Text('Case search').exists, timeout_secs=10)
 
     emedical_number_list = extract_all_eMedical_no_black_text(EXCEL_PATH)
-    # emed_no = emedical_number_list[3]
-    # print(emed_no)
+    print(emedical_number_list)
 
     for emed_no in emedical_number_list[:1]:
         if emed_no.startswith(('HAP', 'TRN')):
-            process_australia(emed_no)
-            # pass
+            # process_australia(emed_no)
+            pass
         elif emed_no.startswith(('NZER', 'NZHR')):
             # process_new_zealand(emed_no)
             pass
