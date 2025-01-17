@@ -8,11 +8,9 @@
 @contact: hsinming.chen@gmail.com
 @software: PyCharm
 """
-from typing import List
 from pathlib import Path
 from time import sleep
-from openpyxl import load_workbook
-import pandas as pd
+import openpyxl
 from helium import *
 
 
@@ -22,181 +20,42 @@ USER_ID = 'e26748'
 PASSWORD = 'Year*2025'
 
 
-def login_to_emedical(user_id: str, password: str):
-    """
-    Opens Chrome browser, navigates to the eMedical login page, and logs in with the provided credentials.
-
-    Parameters:
-    user_id (str): The user ID for login.
-    password (str): The password for login.
-    """
-    # Start Chrome and navigate to the eMedical login page
-    start_chrome('https://www.emedical.immi.gov.au/eMedUI/eMedical')
-
-    # Enter the user ID and password
-    write(user_id, into='User id')
-    write(password, into='Password')
-
-    # Click the Logon button
-    click('Logon')
-
-    # Optional: Add a wait or check to confirm successful login
-    wait_until(Text('Logout').exists, timeout_secs=10)
+def is_black_font(cell):
+    return cell.font is None or cell.font.color is None or cell.font.color.rgb in ["FF000000", None]
 
 
-def extract_all_eMedical_no_black_text(file_path) -> List[str]:
-    # Load workbook
-    workbook = load_workbook(file_path, data_only=True)
-    eMedical_no_list = []
-
-    # Iterate over all sheets
-    for sheet_name in workbook.sheetnames:
-        sheet = workbook[sheet_name]
-        # Find the header "eMedical No."
-        for col in sheet.iter_cols():
-            for cell in col:
-                if cell.value == "eMedical No.":
-                    # Start collecting values from the next row below the header
-                    row_idx = cell.row + 1
-                    while row_idx <= sheet.max_row:
-                        value_cell = sheet.cell(row=row_idx, column=cell.column)
-                        # Check if the cell has text, no fill color, and black text color
-                        if value_cell.value:
-                            fill_color = value_cell.fill.start_color.index
-                            font_color = value_cell.font.color.rgb if value_cell.font.color else None
-                            if fill_color == '00000000' and (font_color == '00000000' or font_color is None):
-                                eMedical_no_list.append(value_cell.value)
-                        row_idx += 1
-
-    return eMedical_no_list
+def is_no_fill(cell):
+    return cell.fill is None or cell.fill.fgColor is None or cell.fill.fgColor.rgb in ["00000000", "FFFFFFFF", None]
 
 
-def extract_emedical_numbers(file_path) -> List:
-    """
-    Extracts all eMedical No. from an Excel file and returns them as a list.
+def extract_emedical_no(file_path):
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    all_emedical_nos = []
 
-    Parameters:
-    file_path (str): The path to the Excel file.
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
 
-    Returns:
-    List[str]: A list of all eMedical No. found in the file.
-    """
-    # Load the Excel file
-    excel_content = pd.ExcelFile(file_path)
-    all_emedical_numbers = []
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value and isinstance(cell.value, str) and cell.value.strip() == "eMedical No.":
+                    # 獲取此列下方的所有值
+                    col_idx = cell.column
+                    for r in range(cell.row + 1, ws.max_row + 1):
+                        target_cell = ws.cell(row=r, column=col_idx)
+                        if target_cell.value and is_black_font(target_cell) and is_no_fill(target_cell):
+                            all_emedical_nos.append(target_cell.value)
 
-    # Iterate through each sheet to extract eMedical No.
-    for sheet in excel_content.sheet_names:
-        df = pd.read_excel(file_path, sheet_name=sheet)
-        # Extract columns that potentially contain eMedical No.
-        for col in df.columns:
-            if df[col].dtype == object:  # Check if the column contains strings
-                id_type = r'(HAP \d+|TRN \w+|NZER \w+|NZHR \w+|IME \w+|UMI \w+|UCI \w+|CEACBC \w+)'
-                emedical_numbers = df[col].dropna().str.extract(id_type)[0]
-                emedical_numbers = emedical_numbers.dropna().tolist()
-                all_emedical_numbers.extend(emedical_numbers)
-
-    return all_emedical_numbers
+    wb.close()
+    return all_emedical_nos
 
 
 def process_australia(emed_no: str):
     click(RadioButton('Using Health Case Identifier'))
     write(emed_no, TextField('ID'))
     click(Button('Search'))
-    if not Text('Your search returned no results.').exists():
-        click(Text('All'))
-        click(Button('Manage Case'))
-        wait_until(Text('Pre exam: Health case details').exists)
-
-        click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
-        click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
-        wait_until(Text('502 Chest X-Ray Examination: Detailed radiology findings').exists)
-
-        if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
-            click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
-            click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
-            click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
-            click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
-            click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
-            click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
-            click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
-        click(Button('Next'))
-        wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
-        sleep(1)
-        click(Button('Next'))
-        wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
-
-        if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
-            click(Button('Prepare for grading'))
-            wait_until(Text('Provide Grading').exists)
-
-        if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
-            click(RadioButton(
-                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
-            click(CheckBox(
-                'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
-            click(Button('Submit Exam'))
-            Alert().accept()
-            wait_until(Text('502 Chest X-ray Examination has been successfully submitted.').exists)
-
-        click(Button('Close'))
-
-
-def process_canada(emed_no: str):
-    click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, TextField('ID'))
-    click(Button('Search'))
-    if not Text('Your search returned no results.').exists():
-        click(Text('All'))
-        click(Button('Manage Case'))
-        wait_until(Text('Pre exam: Health case details').exists)
-
-        click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
-        click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
-        wait_until(Text('502 Chest X-Ray Examination: Detailed radiology findings').exists)
-
-        if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
-            click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
-            click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
-            click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
-            click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
-            click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
-            click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
-            click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
-        click(Button('Next'))
-        wait_until(Text('502 Chest X-Ray Examination: Special findings').exists)
-
-        click(RadioButton('None of the following are present'))
-        click(Button('Next'))
-
-        wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
-        sleep(1)
-        click(Button('Next'))
-        wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
-
-        if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
-            click(Button('Prepare for grading'))
-            wait_until(Text('Provide Grading').exists)
-
-        if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
-            click(RadioButton(
-                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
-            click(CheckBox(
-                'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
-            click(Button('Submit Exam'))
-            Alert().accept()
-            wait_until(Text('502 Chest X-ray Examination has been successfully submitted.').exists)
-
-        click(Button('Close'))
-
-
-def process_new_zealand(emed_no: str):
-    click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, TextField('ID'))
-    click(Button('Search'))
 
     if not Text('Your search returned no results.').exists():
-        click(Text('All'))
+        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))    # the first match ID
         click(Button('Manage Case'))
         wait_until(Text('Pre exam: Health case details').exists)
 
@@ -230,26 +89,141 @@ def process_new_zealand(emed_no: str):
                     'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
                 click(Button('Submit Exam'))
                 Alert().accept()
-                wait_until(Text('The health case has been successfully submitted to the appropriate Department.').exists)
+                wait_until(Text('Success').exists)
+
+        click(Button('Close'))
+
+
+def process_canada(emed_no: str):
+    click(RadioButton('Using Health Case Identifier'))
+    write(emed_no, TextField('ID'))
+    click(Button('Search'))
+
+    if not Text('Your search returned no results.').exists():
+        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))    # the first match ID
+        click(Button('Manage Case'))
+        wait_until(Text('Pre exam: Health case details').exists)
+
+        if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
+            click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
+            click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
+            wait_until(Text('502 Chest X-Ray Examination: Detailed radiology findings').exists)
+
+            if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
+                click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
+                click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
+                click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
+                click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
+                click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
+                click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
+                click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
+            click(Button('Next'))
+            wait_until(Text('502 Chest X-Ray Examination: Special findings').exists)
+
+            click(RadioButton('None of the following are present'))
+            click(Button('Next'))
+
+            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+            sleep(1)
+            click(Button('Next'))
+            wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+
+            if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
+                click(Button('Prepare for grading'))
+                wait_until(Text('Provide Grading').exists)
+
+            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+                click(RadioButton(
+                    'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
+                click(CheckBox(
+                    'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+                click(Button('Submit Exam'))
+                Alert().accept()
+                wait_until(Text('Success').exists)
+
+        click(Button('Close'))
+
+
+def process_new_zealand(emed_no: str):
+    click(RadioButton('Using Health Case Identifier'))
+    write(emed_no, TextField('ID'))
+    click(Button('Search'))
+
+    if not Text('Your search returned no results.').exists():
+        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))  # the first match ID
+        click(Button('Manage Case'))
+        wait_until(Text('Pre exam: Health case details').exists)
+
+        if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
+            click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
+            click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
+            wait_until(Text('502 Chest X-Ray Examination: Detailed radiology findings').exists)
+
+            if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
+                click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
+                click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
+                click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
+                click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
+                click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
+                click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
+                click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
+            click(Button('Next'))
+            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+            sleep(1)
+            click(Button('Next'))
+            wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+
+            if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
+                click(Button('Prepare for grading'))
+                wait_until(Text('Provide Grading').exists)
+
+            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+                click(RadioButton(
+                    'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
+                click(CheckBox(
+                    'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+                click(Button('Submit Exam'))
+                Alert().accept()
+                wait_until(Text('Success').exists)
 
         click(Button('Close'))
 
 
 def process_united_states(emed_no: str):
     click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, 'ID')
+    write(emed_no, TextField('ID'))
     click(Button('Search'))
+
     if not Text('Your search returned no results.').exists():
-        click(Text('All'))
+        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))    # the first match ID
         click(Button('Manage Case'))
         wait_until(Text('Pre exam: Health case details').exists)
-        click(Button('Next'))
-        wait_until(Text('Pre exam: Manage Photo').exists)
-        sleep(3)  # wait loading photo
-        click(Button('Next'))
-        wait_until(Text('Pre exam: Confirm identity').exists)
-        click(Button('Next'))
-        wait_until(Text('All Exams: All exams summary').exists)
+
+        if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
+            click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
+            click(Text('Findings', below=Text('502 Chest X-Ray Examination')))
+            wait_until(Text('502 Chest X-Ray Examination: Findings').exists)
+
+            if not RadioButton('Normal', to_right_of=Text('Findings')).is_selected():
+                click(RadioButton('Normal', to_right_of=Text('Findings')))
+
+            click(Button('Next'))
+            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+            sleep(1)
+            click(Button('Next'))
+            wait_until(Text('502 Chest X-Ray Examination: Examiner Declaration').exists)
+
+            if Button('Prepare for declaration').exists() and Button('Prepare for declaration').is_enabled():
+                click(Button('Prepare for declaration'))
+                wait_until(Text('Examiner declaration').exists)
+
+            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+                click(CheckBox(
+                    'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+                click(Button('Submit Exam'))
+                Alert().accept()
+                wait_until(Text('Success').exists)
+
         click(Button('Close'))
 
 
@@ -261,24 +235,24 @@ if __name__ == "__main__":
     click(Button('Logon'))
     wait_until(Text('Case search').exists, timeout_secs=10)
 
-    emedical_number_list = extract_all_eMedical_no_black_text(EXCEL_PATH)
+    emedical_number_list = extract_emedical_no(EXCEL_PATH)
     print(emedical_number_list)
 
     for emed_no in emedical_number_list[18:19]:
         print(emed_no)
 
         if emed_no.startswith(('HAP', 'TRN')):
-            # process_australia(emed_no)
-            pass
+            process_australia(emed_no)
+            # pass
         elif emed_no.startswith(('NZER', 'NZHR')):
             process_new_zealand(emed_no)
             # pass
         elif emed_no.startswith(('IME', 'UMI', 'UCI')):
-            # process_canada(emed_no)
-            pass
+            process_canada(emed_no)
+            # pass
         elif emed_no.startswith('CEAC'):
-            # process_united_states(emed_no)
-            pass
+            process_united_states(emed_no)
+            # pass
         else:
             pass
 
