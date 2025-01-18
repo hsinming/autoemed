@@ -49,186 +49,237 @@ def extract_emedical_no(file_path):
     return all_emedical_nos
 
 
-def process_australia(emed_no: str):
+def search(emed_no: str):
     click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, TextField('ID'))
+    write(emed_no, into=TextField('ID'))
     click(Button('Search'))
+    wait_until(Text('Select:').exists)
 
-    if not Text('Your search returned no results.').exists():
-        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))    # the first match ID
-        click(Button('Manage Case'))
-        wait_until(Text('Pre exam: Health case details').exists)
 
-        if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
-            click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
-            click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
-            wait_until(Text('502 Chest X-Ray Examination: Detailed radiology findings').exists)
+def manage_case():
+    click(Button('All'))
+    click(Button('Manage Case'))
+    wait_until(Text('Pre exam: Health case details').exists)
 
-            if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
-                click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
-                click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
-                click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
-                click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
-                click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
-                click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
-                click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
-            sleep(1)
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
 
-            if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
-                click(Button('Prepare for grading'))
-                wait_until(Text('Provide Grading').exists)
+def process_australia(emed_no: str):
+    search(emed_no)
+    sleep(1)
+    manage_case()
 
-            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
-                click(RadioButton(
-                    'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
-                click(CheckBox(
-                    'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
-                click(Button('Submit Exam'))
-                Alert().accept()
-                wait_until(Text('Success').exists)
+    if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
+        click(Text('502 Chest X-Ray Examination'))
+        click(Text('Detailed radiology findings'))
+        wait_until(Text('Detailed question').exists)
 
-        click(Button('Close'))
+        for rb_normal in find_all(RadioButton('Normal')):
+            if not rb_normal.is_selected():
+                click(rb_normal)
+
+        if not RadioButton('Absent').is_selected():
+            click(RadioButton('Absent'))
+
+        if not RadioButton('No').is_selected():
+            click(RadioButton('Absent'))
+
+        # if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
+        #     click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
+        #     click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
+        #     click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
+        #     click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
+        #     click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
+        #     click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
+        #     click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
+
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+        sleep(1)
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+
+        if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
+            click(Button('Prepare for grading'))
+            wait_until(Text('Provide Grading').exists)
+
+        if not RadioButton(
+                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.').is_selected():
+            click(RadioButton(
+                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
+
+        if not CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.').is_checked():
+            click(CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+
+        if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+            click(Button('Submit Exam'))
+            wait_until(Alert().exists)
+            Alert().accept()
+            wait_until(Text('Success').exists)
+
+    click(Button('Close'))
 
 
 def process_canada(emed_no: str):
-    click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, TextField('ID'))
-    click(Button('Search'))
+    search(emed_no)
+    sleep(1)
+    manage_case()
 
-    if not Text('Your search returned no results.').exists():
-        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))    # the first match ID
-        click(Button('Manage Case'))
-        wait_until(Text('Pre exam: Health case details').exists)
+    if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
+        click(Text('502 Chest X-Ray Examination'))
+        click(Text('Detailed radiology findings'))
+        wait_until(Text('Detailed question').exists)
 
-        if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
-            click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
-            click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
-            wait_until(Text('502 Chest X-Ray Examination: Detailed radiology findings').exists)
+        for rb_normal in find_all(RadioButton('Normal')):
+            if not rb_normal.is_selected():
+                click(rb_normal)
 
-            if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
-                click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
-                click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
-                click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
-                click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
-                click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
-                click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
-                click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Special findings').exists)
+        if not RadioButton('Absent').is_selected():
+            click(RadioButton('Absent'))
 
+        if not RadioButton('No').is_selected():
+            click(RadioButton('Absent'))
+
+        # if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
+        #     click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
+        #     click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
+        #     click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
+        #     click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
+        #     click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
+        #     click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
+        #     click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
+        click(Button('Next'))
+        wait_until(Text('Special findings').exists)
+
+        if not RadioButton('None of the following are present').is_selected():
             click(RadioButton('None of the following are present'))
-            click(Button('Next'))
+        click(Button('Next'))
 
-            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
-            sleep(1)
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+        wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+        sleep(1)
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
 
-            if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
-                click(Button('Prepare for grading'))
-                wait_until(Text('Provide Grading').exists)
+        if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
+            click(Button('Prepare for grading'))
+            wait_until(Text('Provide Grading').exists)
 
-            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
-                click(RadioButton(
-                    'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
-                click(CheckBox(
-                    'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
-                click(Button('Submit Exam'))
-                Alert().accept()
-                wait_until(Text('Success').exists)
+        if not RadioButton(
+                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.').is_selected():
+            click(RadioButton(
+                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
 
-        click(Button('Close'))
+        if not CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.').is_checked():
+            click(CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+
+        if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+            click(Button('Submit Exam'))
+            wait_until(Alert().exists)
+            Alert().accept()
+            wait_until(Text('Success').exists)
+
+    click(Button('Close'))
 
 
 def process_new_zealand(emed_no: str):
-    click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, TextField('ID'))
-    click(Button('Search'))
+    search(emed_no)
+    sleep(1)
+    manage_case()
 
-    if not Text('Your search returned no results.').exists():
-        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))  # the first match ID
-        click(Button('Manage Case'))
-        wait_until(Text('Pre exam: Health case details').exists)
+    if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
+        click(Text('502 Chest X-Ray Examination'))
+        click(Text('Detailed radiology findings'))
+        wait_until(Text('Detailed question').exists)
 
-        if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
-            click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
-            click(Text('Detailed radiology findings', below=Text('502 Chest X-Ray Examination')))
-            wait_until(Text('502 Chest X-Ray Examination: Detailed radiology findings').exists)
+        for rb_normal in find_all(RadioButton('Normal')):
+            if not rb_normal.is_selected():
+                click(rb_normal)
 
-            if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
-                click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
-                click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
-                click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
-                click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
-                click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
-                click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
-                click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
-            sleep(1)
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+        if not RadioButton('Absent').is_selected():
+            click(RadioButton('Absent'))
 
-            if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
-                click(Button('Prepare for grading'))
-                wait_until(Text('Provide Grading').exists)
+        if not RadioButton('No').is_selected():
+            click(RadioButton('Absent'))
 
-            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
-                click(RadioButton(
-                    'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
-                click(CheckBox(
-                    'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
-                click(Button('Submit Exam'))
-                Alert().accept()
-                wait_until(Text('Success').exists)
+        # if not RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')).is_selected():
+        #     click(RadioButton('Normal', to_right_of=Text('1. Skeleton and soft tissue')))
+        #     click(RadioButton('Normal', to_right_of=Text('2. Cardiac shadow')))
+        #     click(RadioButton('Normal', to_right_of=Text('3. Hilar and lymphatic glands')))
+        #     click(RadioButton('Normal', to_right_of=Text('4. Hemidiaphragms and costophrenic angles')))
+        #     click(RadioButton('Normal', to_right_of=Text('5. Lung fields')))
+        #     click(RadioButton('Absent', to_right_of=Text('6. Evidence of Tuberculosis (TB)')))
+        #     click(RadioButton('No', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?')))
 
-        click(Button('Close'))
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+        sleep(1)
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+
+        if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
+            click(Button('Prepare for grading'))
+            wait_until(Text('Provide Grading').exists)
+
+        if not RadioButton(
+                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.').is_selected():
+            click(RadioButton(
+                'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
+
+        if not CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.').is_checked():
+            click(CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+
+        if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+            click(Button('Submit Exam'))
+            wait_until(Alert().exists)
+            Alert().accept()
+            wait_until(Text('Success').exists)
+
+    click(Button('Close'))
 
 
 def process_united_states(emed_no: str):
-    click(RadioButton('Using Health Case Identifier'))
-    write(emed_no, TextField('ID'))
-    click(Button('Search'))
+    search(emed_no)
+    sleep(1)
+    manage_case()
 
-    if not Text('Your search returned no results.').exists():
-        click(S("#caseSearch-searchResults_0", above=Button('Manage Case')))    # the first match ID
-        click(Button('Manage Case'))
-        wait_until(Text('Pre exam: Health case details').exists)
+    if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
+        click(Text('502 Chest X-Ray Examination'))
+        click(Text('Findings'))
+        wait_until(Text('502 Chest X-Ray Examination: Findings').exists)
 
-        if Text(below=Text('Health Case Status'), to_left_of=Text('Exam in Progress')).value == 'CURRENT':
-            click(Text('502 Chest X-Ray Examination', below=Text('All Exams')))
-            click(Text('Findings', below=Text('502 Chest X-Ray Examination')))
-            wait_until(Text('502 Chest X-Ray Examination: Findings').exists)
+        if not RadioButton('Normal', to_right_of=Text('Findings')).is_selected():
+            click(RadioButton('Normal', to_right_of=Text('Findings')))
 
-            if not RadioButton('Normal', to_right_of=Text('Findings')).is_selected():
-                click(RadioButton('Normal', to_right_of=Text('Findings')))
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+        sleep(1)
+        click(Button('Next'))
+        wait_until(Text('502 Chest X-Ray Examination: Examiner Declaration').exists)
 
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
-            sleep(1)
-            click(Button('Next'))
-            wait_until(Text('502 Chest X-Ray Examination: Examiner Declaration').exists)
+        if Button('Prepare for declaration').exists() and Button('Prepare for declaration').is_enabled():
+            click(Button('Prepare for declaration'))
+            wait_until(Text('Examiner declaration').exists)
 
-            if Button('Prepare for declaration').exists() and Button('Prepare for declaration').is_enabled():
-                click(Button('Prepare for declaration'))
-                wait_until(Text('Examiner declaration').exists)
+        if not CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.').is_checked():
+            click(CheckBox(
+                'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
 
-            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
-                click(CheckBox(
-                    'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
-                click(Button('Submit Exam'))
-                Alert().accept()
-                wait_until(Text('Success').exists)
+        if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+            click(Button('Submit Exam'))
+            wait_until(Alert().exists)
+            Alert().accept()
+            wait_until(Text('Success').exists)
 
-        click(Button('Close'))
+    click(Button('Close'))
 
 
 if __name__ == "__main__":
-    # Start Chrome and navigate to the eMedical login page
+    # Login to eMedical website
     driver = start_chrome(EMEDICAL_URL)
     write(USER_ID, into=TextField('User id'))
     write(PASSWORD, into=TextField('Password'))
@@ -238,8 +289,8 @@ if __name__ == "__main__":
     emedical_number_list = extract_emedical_no(EXCEL_PATH)
     print(emedical_number_list)
 
-    for emed_no in emedical_number_list[18:19]:
-        print(emed_no)
+    for emed_no in emedical_number_list[:]:
+        print(f'Now: {emed_no}')
 
         if emed_no.startswith(('HAP', 'TRN')):
             process_australia(emed_no)
