@@ -4,20 +4,21 @@
 @author: Hsin-ming Chen
 @license: GPL
 @file: main-gui.py
-@time: 2025/01/19
+@time: 2025/01/20
 @contact: hsinming.chen@gmail.com
 @software: PyCharm
 """
 import logging
 from pathlib import Path
 from time import sleep
+import threading
 from openpyxl import load_workbook
 from helium import start_chrome, write, click, wait_until, find_all, kill_browser, Text, TextField, Button, RadioButton, CheckBox, Alert
 import tkinter as tk
-from tkinter import filedialog, StringVar, BooleanVar, ttk
-
+from tkinter import filedialog, StringVar, BooleanVar
 
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
+
 # 設定日誌
 log_file = Path("log.txt")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
@@ -25,16 +26,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
     logging.StreamHandler()
 ])
 
-
-def is_black_font(cell):
-    return cell.font is None or cell.font.color is None or cell.font.color.rgb in ["FF000000", None]
-
-
-def is_no_fill(cell):
-    return cell.fill is None or cell.fill.fgColor is None or cell.fill.fgColor.rgb in ["00000000", "FFFFFFFF", None]
+# 中止標誌 (使用 threading.Event)
+stop_event = threading.Event()
 
 
 def extract_emedical_no(file_path):
+    """從 Excel 讀取 eMedical No. 清單"""
+    def is_black_font(cell):
+        return cell.font is None or cell.font.color is None or cell.font.color.rgb in ["FF000000", None]
+
+    def is_no_fill(cell):
+        return cell.fill is None or cell.fill.fgColor is None or cell.fill.fgColor.rgb in ["00000000", "FFFFFFFF", None]
+
     wb = load_workbook(file_path, data_only=True)
     all_emedical_nos = []
 
@@ -57,43 +60,57 @@ def extract_emedical_no(file_path):
 
 def start_gui():
     root = tk.Tk()
-    root.title("eMedical Automation by 陳信銘 2025-01-19")
+    root.title("eMedical Automation v1.1 By HsinMing Chen")
     root.attributes('-topmost', True)  # 永遠在最上層
 
-    tk.Label(root, text="User ID:").grid(row=0, column=0)
+    tk.Label(root, text="User ID:").grid(row=0, column=0, sticky="w", padx=5, pady=2)
     user_id_var = StringVar()
-    tk.Entry(root, textvariable=user_id_var).grid(row=0, column=1)
+    tk.Entry(root, textvariable=user_id_var).grid(row=0, column=1, columnspan=2, sticky="ew", padx=5, pady=2)
 
-    tk.Label(root, text="Password:").grid(row=1, column=0)
+    tk.Label(root, text="Password:").grid(row=1, column=0, sticky="w", padx=5, pady=2)
     password_var = StringVar()
-    tk.Entry(root, textvariable=password_var, show='*').grid(row=1, column=1)
+    tk.Entry(root, textvariable=password_var, show='*').grid(row=1, column=1, columnspan=2, sticky="ew", padx=5, pady=2)
 
-    tk.Label(root, text="Excel File:").grid(row=2, column=0)
+    tk.Label(root, text="Excel File:").grid(row=2, column=0, sticky="w", padx=5, pady=2)
     excel_path_var = StringVar()
-    tk.Entry(root, textvariable=excel_path_var, width=40).grid(row=2, column=1)
+    tk.Entry(root, textvariable=excel_path_var, width=40).grid(row=2, column=1, sticky="ew", padx=5, pady=2)
 
     def select_file():
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
         excel_path_var.set(file_path)
 
-    tk.Button(root, text="Browse", command=select_file).grid(row=2, column=2)
+    tk.Button(root, text="Browse", command=select_file).grid(row=2, column=2, padx=5, pady=2)
 
     headless_var = BooleanVar()
     close_browser_var = BooleanVar()
-    tk.Checkbutton(root, text="Headless Mode", variable=headless_var).grid(row=3, column=0)
-    tk.Checkbutton(root, text="Kill Browser After Completion", variable=close_browser_var).grid(row=3, column=1)
+    tk.Checkbutton(root, text="Headless Mode", variable=headless_var).grid(row=3, column=0, sticky="w", padx=5, pady=2)
+    tk.Checkbutton(root, text="Kill Browser After Completion", variable=close_browser_var).grid(row=3, column=1,
+                                                                                                sticky="w", padx=5,
+                                                                                                pady=2)
 
     status_var = StringVar()
-    tk.Label(root, textvariable=status_var, fg='blue').grid(row=4, column=0, columnspan=3)
+    tk.Label(root, textvariable=status_var, fg='blue').grid(row=4, column=0, columnspan=3, padx=5, pady=5)
 
+    # eMedical No. ListBox 區域
     frame = tk.Frame(root)
-    frame.grid(row=5, column=0, columnspan=3, padx=10, pady=5)
+    frame.grid(row=5, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
 
-    tk.Label(frame, text="成功的 eMedical No. (數量: 0)", name="success_label").grid(row=0, column=0, padx=10)
-    tk.Label(frame, text="失敗的 eMedical No. (數量: 0)", name="failure_label").grid(row=0, column=2, padx=10)
+    tk.Label(frame, text="eMedical No. 清單").grid(row=0, column=0, columnspan=2, pady=2)
+    emed_no_listbox = tk.Listbox(frame, height=5, width=50)
+    emed_no_scrollbar = tk.Scrollbar(frame, orient=tk.VERTICAL, command=emed_no_listbox.yview)
+    emed_no_listbox.config(yscrollcommand=emed_no_scrollbar.set)
 
-    success_listbox = tk.Listbox(frame, height=5, width=40)
-    failure_listbox = tk.Listbox(frame, height=5, width=40)
+    emed_no_listbox.grid(row=1, column=0, sticky="ew")
+    emed_no_scrollbar.grid(row=1, column=1, sticky="ns")
+
+    # 成功 & 失敗 ListBox 區域
+    tk.Label(frame, text="成功的 eMedical No. (數量: 0)", name="success_label").grid(row=2, column=0, columnspan=2,
+                                                                                     pady=2)
+    tk.Label(frame, text="失敗的 eMedical No. (數量: 0)", name="failure_label").grid(row=2, column=2, columnspan=2,
+                                                                                     pady=2)
+
+    success_listbox = tk.Listbox(frame, height=5, width=30)
+    failure_listbox = tk.Listbox(frame, height=5, width=30)
 
     success_scrollbar = tk.Scrollbar(frame, orient=tk.VERTICAL, command=success_listbox.yview)
     failure_scrollbar = tk.Scrollbar(frame, orient=tk.VERTICAL, command=failure_listbox.yview)
@@ -101,10 +118,10 @@ def start_gui():
     success_listbox.config(yscrollcommand=success_scrollbar.set)
     failure_listbox.config(yscrollcommand=failure_scrollbar.set)
 
-    success_listbox.grid(row=1, column=0)
-    failure_listbox.grid(row=1, column=2)
-    success_scrollbar.grid(row=1, column=1, sticky='ns')
-    failure_scrollbar.grid(row=1, column=3, sticky='ns')
+    success_listbox.grid(row=3, column=0, sticky="ew", padx=5, pady=2)
+    success_scrollbar.grid(row=3, column=1, sticky="ns", padx=5, pady=2)
+    failure_listbox.grid(row=3, column=2, sticky="ew", padx=5, pady=2)
+    failure_scrollbar.grid(row=3, column=3, sticky="ns", padx=5, pady=2)
 
     def update_counts():
         success_label = frame.nametowidget("success_label")
@@ -112,7 +129,7 @@ def start_gui():
         success_label.config(text=f"成功的 eMedical No. (數量: {success_listbox.size()})")
         failure_label.config(text=f"失敗的 eMedical No. (數量: {failure_listbox.size()})")
 
-    def run_script():
+    def start_emedical_workflow():
         user_id = user_id_var.get()
         password = password_var.get()
         excel_path = excel_path_var.get()
@@ -125,21 +142,35 @@ def start_gui():
 
         status_var.set("正在處理...")
         root.update()
-        process_emedical(root, user_id, password, excel_path, status_var, success_listbox, failure_listbox, progress,
-                         headless, close_browser, update_counts)
-        status_var.set("處理完成！")
 
-    process_button = tk.Button(root, text="開始處理", command=run_script, font=("Arial", 14, "bold"), height=2,
-                               width=15)
-    process_button.grid(row=6, column=1, pady=10)
+        stop_event.clear()
 
-    progress = ttk.Progressbar(root, orient=tk.HORIZONTAL, length=300, mode='determinate')
-    progress.grid(row=7, column=0, columnspan=3, pady=10)
+        # **使用 Thread 避免 GUI 被阻塞**
+        emedical_workflow_thread = threading.Thread(
+            target=emedical_workflow,
+            args=(root, user_id, password, excel_path, status_var, emed_no_listbox, success_listbox, failure_listbox, headless, close_browser, update_counts),
+            daemon=True  # 設為 Daemon，確保主程式關閉時該 Thread 也會終止
+        )
+        emedical_workflow_thread.start()
+
+    def stop_emedical_workflow():
+        """中止處理流程"""
+        stop_event.set()
+        status_var.set("已中止處理")
+
+    process_button = tk.Button(root, text="開始處理", command=start_emedical_workflow, font=("Arial", 14, "bold"),
+                               height=2, width=15)
+    process_button.grid(row=6, column=0, padx=10, pady=10)
+
+    stop_button = tk.Button(root, text="中止", command=stop_emedical_workflow, font=("Arial", 14, "bold"), height=2,
+                            width=15,
+                            fg="red")
+    stop_button.grid(row=6, column=1, padx=10, pady=10)
 
     root.mainloop()
 
 
-def process_case(emed_no: str, country: str):
+def emedical_cxr_automation(emed_no: str, country: str):
     """
     通用的 eMedical 案例處理函數
     根據 country 參數決定是否有額外的步驟
@@ -149,6 +180,7 @@ def process_case(emed_no: str, country: str):
             click(RadioButton('Using Health Case Identifier'))
         write(emed_no, into=TextField('ID'))
         click(Button('Search'))
+
         wait_until(Text('Select:').exists)
         sleep(1)    #wait for reading status
         click(Button('All'))
@@ -227,12 +259,14 @@ def process_case(emed_no: str, country: str):
         return False
 
 
-def process_emedical(root, user_id, password, excel_path, status_var, success_listbox, failure_listbox, progress, headless, close_browser, update_counts):
+def emedical_workflow(root, user_id, password, excel_path, status_var, emed_no_listbox, success_listbox, failure_listbox, headless, close_browser, update_counts):
     logging.info(f"讀取 eMedical No. 來自 {excel_path}")
     emedical_numbers = extract_emedical_no(Path(excel_path))
     logging.info(f"讀取 {len(emedical_numbers)} 個 eMedical No.")
 
-    progress['maximum'] = len(emedical_numbers)
+    # 將 eMedical No. 加入 GUI 清單
+    for emed_no in emedical_numbers:
+        emed_no_listbox.insert(tk.END, emed_no)
 
     country_map = {
         'HAP': "澳大利亞",
@@ -245,38 +279,56 @@ def process_emedical(root, user_id, password, excel_path, status_var, success_li
         'CEAC': "美國"
     }
 
-    start_chrome(EMEDICAL_URL, headless=headless)
-    write(user_id, into=TextField('User id'))
-    write(password, into=TextField('Password'))
-    click(Button('Logon'))
+    try:
+        start_chrome(EMEDICAL_URL, headless=headless)
+        write(user_id, into=TextField('User id'))
+        write(password, into=TextField('Password'))
+        click(Button('Logon'))
+        wait_until(Text('Case search').exists, timeout_secs=10)
 
-    wait_until(Text('Case search').exists, timeout_secs=10)
-    for index, emed_no in enumerate(emedical_numbers):
-        status_var.set(f'現在處理: {emed_no}')
-        logging.info(f'現在處理: {emed_no}')
+        for index, emed_no in enumerate(emedical_numbers):
+            if stop_event.is_set():
+                logging.info("用戶手動中止處理")
+                status_var.set("處理已中止")
+                break
 
-        country = next((v for k, v in country_map.items() if emed_no.startswith(k)), None)
+            status_var.set(f'現在處理: {emed_no}')
+            logging.info(f'現在處理: {emed_no}')
+            root.update()
 
-        if country:
-            success = process_case(emed_no, country)
-        else:
-            logging.warning(f"未知的 eMedical No. 類型: {emed_no}")
-            success = False
+            # 標記當前處理中的 eMedical No.
+            emed_no_listbox.itemconfig(index, {'bg': 'blue', 'fg': 'white'})
 
-        if success:
-            success_listbox.insert(tk.END, emed_no)
-        else:
-            failure_listbox.insert(tk.END, emed_no)
+            country = next((v for k, v in country_map.items() if emed_no.startswith(k)), None)
 
-        update_counts()
-        progress['value'] = index + 1
-        root.update()
+            if country:
+                success = emedical_cxr_automation(emed_no, country)
+            else:
+                logging.warning(f"未知國家的 eMedical No.: {emed_no}")
+                success = False
 
-    if close_browser and not headless:
-        kill_browser()
+            # 恢復 eMedical No. 顏色
+            emed_no_listbox.itemconfig(index, {'bg': 'white', 'fg': 'black'})
 
-    logging.info("處理完成！")
-    logging.info(f"成功: {success_listbox.size()}, 失敗: {failure_listbox.size()}")
+            # 根據結果分類
+            if success:
+                success_listbox.insert(tk.END, emed_no)
+            else:
+                failure_listbox.insert(tk.END, emed_no)
+
+            update_counts()
+
+        status_var.set(f"處理完成！成功: {success_listbox.size()}, 失敗: {failure_listbox.size()}")
+        logging.info(f"處理完成！成功: {success_listbox.size()}, 失敗: {failure_listbox.size()}")
+
+    except Exception as e:
+        logging.error(f"eMedical 工作流程出錯: {e}")
+        status_var.set("處理時發生錯誤")
+
+    finally:
+        if close_browser:
+            kill_browser()
+        logging.info("處理流程結束")
 
 
 if __name__ == "__main__":
