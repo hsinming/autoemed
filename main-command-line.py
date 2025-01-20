@@ -37,15 +37,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def is_black_font(cell):
-    return cell.font is None or cell.font.color is None or cell.font.color.rgb in ["FF000000", None]
-
-
-def is_no_fill(cell):
-    return cell.fill is None or cell.fill.fgColor is None or cell.fill.fgColor.rgb in ["00000000", "FFFFFFFF", None]
-
-
 def extract_emedical_no(file_path):
+    def is_black_font(cell):
+        return cell.font is None or cell.font.color is None or cell.font.color.rgb in ["FF000000", None]
+
+    def is_no_fill(cell):
+        return cell.fill is None or cell.fill.fgColor is None or cell.fill.fgColor.rgb in ["00000000", "FFFFFFFF", None]
+
     wb = openpyxl.load_workbook(file_path, data_only=True)
     all_emedical_nos = []
 
@@ -66,7 +64,7 @@ def extract_emedical_no(file_path):
     return all_emedical_nos
 
 
-def process_case(emed_no: str, country: str):
+def emedical_cxr_automation(emed_no: str, country: str):
     """
     通用的 eMedical 案例處理函數
     根據 country 參數決定是否有額外的步驟
@@ -186,7 +184,7 @@ if __name__ == "__main__":
         country = next((v for k, v in country_map.items() if emed_no.startswith(k)), None)
 
         if country:
-            success = process_case(emed_no, country)
+            success = emedical_cxr_automation(emed_no, country)
         else:
             logging.warning(f"未知的 eMedical No. 類型: {emed_no}")
             success = False
