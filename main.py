@@ -19,8 +19,8 @@
 """
 @author: Hsin-ming Chen
 @license: GPL
-@file: main-gui.py
-@time: 2025/01/20
+@file: main.py
+@time: 2025/01/21
 @contact: hsinming.chen@gmail.com
 @software: PyCharm
 """
@@ -35,7 +35,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 import tkinter as tk
 from tkinter import ttk, filedialog, StringVar, BooleanVar
 
-VERSION = "1.3"
+VERSION = "1.4"
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
 MAX_LOGIN_ATTEMPTS = 1
 
@@ -171,15 +171,15 @@ def emedical_cxr_automation(emed_no: str, country: str):
                 click(Text('Detailed radiology findings'))
 
                 wait_until(Text('Detailed question').exists)
-                for rb_normal in find_all(RadioButton('Normal')):
-                    if not rb_normal.is_selected():
-                        click(rb_normal)
+                for normal in find_all(RadioButton('Normal')):
+                    if not normal.is_selected():
+                        click(normal)
 
                 if not RadioButton('Absent').is_selected():
                     click(RadioButton('Absent'))
 
-                if not RadioButton('No').is_selected():
-                    click(RadioButton('No'))
+                if not RadioButton('No', to_right_of=RadioButton('Not selected')).is_selected():
+                    click(RadioButton('No', to_right_of=RadioButton('Not selected')))
 
                 if country == "加拿大":
                     click(Button('Next'))
@@ -430,6 +430,12 @@ def start_gui():
         if not user_id or not password or not excel_path:
             update_status("請填寫所有欄位！")
             return
+
+        # 清空 ListBox 內容
+        emed_no_listbox.delete(0, tk.END)
+        success_listbox.delete(0, tk.END)
+        failure_listbox.delete(0, tk.END)
+        update_counts()
 
         update_status("正在處理...")
         stop_event.clear()
