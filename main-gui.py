@@ -12,13 +12,15 @@ import logging
 from pathlib import Path
 from time import sleep
 import threading
-import re
 from openpyxl import load_workbook
 from helium import start_chrome, write, click, wait_until, find_all, kill_browser, Text, TextField, Button, RadioButton, CheckBox, Alert
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 import tkinter as tk
 from tkinter import ttk, filedialog, StringVar, BooleanVar
 
+VERSION = "1.2"
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
+MAX_LOGIN_ATTEMPTS = 1
 
 # 設定日誌
 log_file = Path("log.txt")
@@ -32,31 +34,83 @@ stop_event = threading.Event()
 
 
 def extract_emedical_no(file_path):
-    """從 Excel 讀取 eMedical No. 清單"""
+    """從 Excel 讀取 eMedical No. 清單，並過濾出黑色文字且無底色的數據"""
     def is_black_font(cell):
-        return cell.font is None or cell.font.color is None or cell.font.color.rgb in ["FF000000", None]
+        """檢查單元格文字是否為黑色"""
+        return (
+            cell.font is None or
+            cell.font.color is None or
+            cell.font.color.rgb in ["FF000000", None]  # None 表示未設置顏色，預設為黑色
+        )
 
     def is_no_fill(cell):
-        return cell.fill is None or cell.fill.fgColor is None or cell.fill.fgColor.rgb in ["00000000", "FFFFFFFF", None]
+        """檢查單元格是否沒有填充背景色"""
+        return (
+            cell.fill is None or
+            cell.fill.fgColor is None or
+            cell.fill.fgColor.rgb in ["00000000", "FFFFFFFF", None]  # 透明 or 白色
+        )
 
-    wb = load_workbook(file_path, data_only=True)
+    if not Path(file_path).exists():
+        logging.error(f"找不到 Excel 檔案: {file_path}")
+        return []
+
+    try:
+        wb = load_workbook(file_path, data_only=True)
+    except Exception as e:
+        logging.error(f"讀取 Excel 發生錯誤: {e}")
+        return []
+
     all_emedical_nos = []
-
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
-
+        found_header = False  # 確保有找到 "eMedical No."
         for row in ws.iter_rows():
             for cell in row:
                 if cell.value and isinstance(cell.value, str) and cell.value.strip() == "eMedical No.":
+                    found_header = True
                     # 獲取此列下方的所有值
                     col_idx = cell.column
                     for r in range(cell.row + 1, ws.max_row + 1):
                         target_cell = ws.cell(row=r, column=col_idx)
                         if target_cell.value and is_black_font(target_cell) and is_no_fill(target_cell):
-                            all_emedical_nos.append(target_cell.value)
+                            all_emedical_nos.append(str(target_cell.value))
+        if not found_header:
+            logging.warning(f"無法在 {sheet_name} 找到 'eMedical No.' 欄位")
 
     wb.close()
+
+    if len(all_emedical_nos) == 0:
+        logging.warning("未讀取到任何有效的 eMedical No.")
+
     return all_emedical_nos
+
+
+def login_to_emedical(user_id, password, headless):
+    for attempt in range(1, MAX_LOGIN_ATTEMPTS + 1):
+        try:
+            logging.info("啟動瀏覽器並登入 eMedical 系統")
+            start_chrome(EMEDICAL_URL, headless=headless)
+            write(user_id, into=TextField('User id'))
+            write(password, into=TextField('Password'))
+            click(Button('Logon'))
+            wait_until(Text('Case search').exists, timeout_secs=10)
+            logging.info("登入成功！")
+            return True  # 登入成功
+
+        except NoSuchElementException:
+            logging.error("找不到登入欄位，請檢查頁面是否變更")
+
+        except TimeoutException:
+            logging.warning(f"登入超時，嘗試第 {attempt} 次...")
+            sleep(2)  # 等待後重試
+
+        except WebDriverException as e:
+            logging.error(f"瀏覽器發生錯誤: {e}")
+            break
+
+    logging.error("多次嘗試登入失敗，請檢查帳號密碼")
+    return False
 
 
 def emedical_cxr_automation(emed_no: str, country: str):
@@ -143,34 +197,37 @@ def emedical_cxr_automation(emed_no: str, country: str):
         logging.info(f"成功處理 ({country}): {emed_no}")
         return True
 
-    except Exception as e:
-        logging.error(f"處理失敗 ({country}): {emed_no}, 錯誤: {e}")
+    except NoSuchElementException:
+        logging.error(f"找不到指定元素，可能是 UI 變更，eMedical No: {emed_no}")
+        return False
+
+    except TimeoutException as e:
+        logging.error(f"查詢超時: {emed_no}, 錯誤: {e}")
         return False
 
 
-def emedical_workflow(root, user_id, password, excel_path, status_var, emed_no_listbox, success_listbox, failure_listbox, headless, close_browser, update_counts):
-    def get_country(emed_no):
-        country_map = {
-            'HAP': "澳大利亞",
-            'TRN': "澳大利亞",
-            'NZER': "紐西蘭",
-            'NZHR': "紐西蘭",
-            'IME': "加拿大",
-            'UMI': "加拿大",
-            'UCI': "加拿大",
-            'CEAC': "美國"
-        }
-        pattern_map = {re.compile(f"^{k}"): v for k, v in country_map.items()}
+def get_country(emed_no):
+    """根據 eMedical No. 的前綴判斷對應的國家"""
+    prefix_to_country = {
+        "HAP": "澳大利亞",
+        "TRN": "澳大利亞",
+        "NZER": "紐西蘭",
+        "NZHR": "紐西蘭",
+        "IME": "加拿大",
+        "UMI": "加拿大",
+        "UCI": "加拿大",
+        "CEAC": "美國",
+    }
 
-        for pattern, country in pattern_map.items():
-            if pattern.match(emed_no):
-                return country
-        return "未知國家"
+    for prefix, country in prefix_to_country.items():
+        if emed_no.startswith(prefix):
+            return country
 
-    def update_status(msg):
-        status_var.set(msg)
-        root.after(100, root.update)  # 避免阻塞 UI
+    return "未知國家"
 
+
+def emedical_workflow(user_id, password, excel_path, update_status, emed_no_listbox, success_listbox,
+                      failure_listbox, headless, close_browser, update_counts):
     logging.info(f"讀取 eMedical No. 來自 {excel_path}")
     if not Path(excel_path).exists():
         logging.error(f"找不到檔案: {excel_path}")
@@ -188,71 +245,52 @@ def emedical_workflow(root, user_id, password, excel_path, status_var, emed_no_l
     for emed_no in emedical_numbers:
         emed_no_listbox.insert(tk.END, emed_no)
 
-    try:
-        logging.info("啟動瀏覽器並登入 eMedical 系統")
-        start_chrome(EMEDICAL_URL, headless=headless)
-        write(user_id, into=TextField('User id'))
-        write(password, into=TextField('Password'))
-        click(Button('Logon'))
-        wait_until(Text('Case search').exists, timeout_secs=10)
+    if not login_to_emedical(user_id, password, headless):
+        update_status("登入失敗，請檢查帳號密碼")
+        return  # 終止執行
 
-        for index, emed_no in enumerate(emedical_numbers):
-            try:
-                if stop_event.is_set():
-                    logging.info("用戶手動中止處理")
-                    update_status("處理已中止")
-                    break
+    for index, emed_no in enumerate(emedical_numbers):
+        if stop_event.is_set():
+            logging.info("用戶手動中止處理")
+            update_status("處理已中止")
+            break
 
-                update_status(f'現在處理: {emed_no}')
-                logging.info(f'現在處理: {emed_no}')
+        update_status(f'現在處理: {emed_no}')
+        logging.info(f'現在處理: {emed_no}')
 
-                # 標記當前處理中的 eMedical No.
-                emed_no_listbox.itemconfig(index, {'bg': 'blue', 'fg': 'white'})
+        # 標記當前處理中的 eMedical No.
+        emed_no_listbox.itemconfig(index, {'bg': 'blue', 'fg': 'white'})
 
-                country = get_country(emed_no)
-                if country == "未知國家":
-                    logging.warning(f"未知國家的 eMedical No.: {emed_no}")
-                    success = False
-                else:
-                    success = emedical_cxr_automation(emed_no, country)
-
-            except Exception as e:
-                logging.error(f"處理 {emed_no} 失敗: {e}")
-                success = False
-
-            finally:
-                emed_no_listbox.itemconfig(index, {'bg': 'white', 'fg': 'black'})  # 恢復顏色
-
-                # 統一處理成功或失敗
-                if success:
-                    success_listbox.insert(tk.END, emed_no)
-                else:
-                    failure_listbox.insert(tk.END, emed_no)
-
-                update_counts()
-
-        update_status(f"處理完成！成功: {success_listbox.size()}, 失敗: {failure_listbox.size()}")
-        logging.info(f"處理完成！成功: {success_listbox.size()}, 失敗: {failure_listbox.size()}")
-
-    except Exception as e:
-        logging.error(f"eMedical 工作流程出錯: {e}")
-        status_var.set("處理時發生錯誤")
-
-    finally:
-        if close_browser:
-            logging.info("關閉瀏覽器")
-            kill_browser()
+        country = get_country(emed_no)
+        if country == "未知國家":
+            logging.warning(f"未知國家的 eMedical No.: {emed_no}")
+            success = False
         else:
-            logging.info("保留瀏覽器供用戶檢查")
+            success = emedical_cxr_automation(emed_no, country)
+
+        emed_no_listbox.itemconfig(index, {'bg': 'white', 'fg': 'black'})  # 恢復顏色
+
+        if success:
+            success_listbox.insert(tk.END, emed_no)
+        else:
+            failure_listbox.insert(tk.END, emed_no)
+
+        update_counts()
+
+    update_status(f"處理完成！成功: {success_listbox.size()}, 失敗: {failure_listbox.size()}")
+    logging.info(f"處理完成！成功: {success_listbox.size()}, 失敗: {failure_listbox.size()}")
+
+    if close_browser or headless:
+        logging.info("關閉瀏覽器")
+        kill_browser()
 
 
 def start_gui():
     root = tk.Tk()
-    root.title("eMedical Automation v1.1 By HsinMing Chen")
+    root.title(f"eMedical Automation v{VERSION} By HsinMing Chen")
     root.geometry("500x800")  # 預設視窗大小
     root.minsize(500, 800)  # 最小大小，避免視窗過小
     root.resizable(True, True)  # 允許調整大小
-    root.attributes('-topmost', True)  # 永遠在最上層
 
     style = ttk.Style()
     style.configure("TButton", font=("Arial", 12))
@@ -313,6 +351,10 @@ def start_gui():
     status_var = StringVar()
     ttk.Label(main_frame, textvariable=status_var, foreground='blue').grid(row=3, column=0, pady=5, sticky="w")
 
+    def update_status(msg):
+        status_var.set(msg)
+        root.after(100, lambda: root.update_idletasks())  # 避免 GUI 卡住
+
     # eMedical No. Listbox
     list_frame = ttk.LabelFrame(main_frame, text="eMedical No. 清單", padding=10)
     list_frame.grid(row=4, column=0, sticky="nsew", pady=5)
@@ -360,18 +402,17 @@ def start_gui():
         close_browser = close_browser_var.get()
 
         if not user_id or not password or not excel_path:
-            status_var.set("請填寫所有欄位！")
+            update_status("請填寫所有欄位！")
             return
 
-        status_var.set("正在處理...")
-        root.update()
-
+        update_status("正在處理...")
         stop_event.clear()
 
         # **使用 Thread 避免 GUI 被阻塞**
         emedical_workflow_thread = threading.Thread(
             target=emedical_workflow,
-            args=(root, user_id, password, excel_path, status_var, emed_no_listbox, success_listbox, failure_listbox, headless, close_browser, update_counts),
+            args=(user_id, password, excel_path, update_status, emed_no_listbox, success_listbox,
+                  failure_listbox, headless, close_browser, update_counts),
             daemon=True  # 設為 Daemon，確保主程式關閉時該 Thread 也會終止
         )
         emedical_workflow_thread.start()
@@ -379,8 +420,7 @@ def start_gui():
     def stop_emedical_workflow():
         """中止處理流程"""
         stop_event.set()
-        status_var.set("已中止處理")
-        root.update()
+        update_status("已中止處理")
 
     # 按鈕區塊
     button_frame = ttk.Frame(main_frame, padding=10)
