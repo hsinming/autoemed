@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
+
+# nuitka-project: --mingw64
+# nuitka-project: --show-progress
+# nuitka-project: --show-memory
+# nuitka-project: --standalone
+# nuitka-project: --windows-console-mode=disable
+# nuitka-project: --windows-icon-from-ico=icon.ico
+# nuitka-project: --output-dir=build
+
+# 启用插件
+# nuitka-project: --enable-plugin=tk-inter
+# nuitka-project: --enable-plugin=upx
+
+# 移除不必要的导入
+# nuitka-project: --nofollow-import-to=numpy
+# nuitka-project: --nofollow-import-to=pandas
 """
 @author: Hsin-ming Chen
 @license: GPL
@@ -14,11 +30,12 @@ from time import sleep
 import threading
 from openpyxl import load_workbook
 from helium import start_chrome, write, click, wait_until, find_all, kill_browser, Text, TextField, Button, RadioButton, CheckBox, Alert
+from selenium.webdriver import ChromeOptions
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 import tkinter as tk
 from tkinter import ttk, filedialog, StringVar, BooleanVar
 
-VERSION = "1.2"
+VERSION = "1.3"
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
 MAX_LOGIN_ATTEMPTS = 1
 
@@ -87,10 +104,19 @@ def extract_emedical_no(file_path):
 
 
 def login_to_emedical(user_id, password, headless):
+    options = ChromeOptions()
+    options.add_argument("--disable-extensions")  # 禁用擴展，防止擴展產生 scoped_dir
+    options.add_argument("--incognito")  # 無痕模式，減少緩存
+    options.add_argument("--no-sandbox")  # 避免某些安全性限制
+    options.add_argument("--disable-gpu")  # 減少 WebGPU 緩存
+    options.add_argument("--disable-background-networking")  # 停止後台更新
+    options.add_argument("--disable-component-update")  # 禁用組件更新
+    options.add_argument("--disable-features=NetworkService,NetworkServiceInProcess")  # 減少網絡相關的暫存文件
+
     for attempt in range(1, MAX_LOGIN_ATTEMPTS + 1):
         try:
             logging.info("啟動瀏覽器並登入 eMedical 系統")
-            start_chrome(EMEDICAL_URL, headless=headless)
+            start_chrome(EMEDICAL_URL, headless=headless, options=options)
             write(user_id, into=TextField('User id'))
             write(password, into=TextField('Password'))
             click(Button('Logon'))
