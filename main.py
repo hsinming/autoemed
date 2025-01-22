@@ -92,6 +92,7 @@ def extract_emedical_no(file_path):
                         target_cell = ws.cell(row=r, column=col_idx)
                         if target_cell.value and is_black_font(target_cell) and is_no_fill(target_cell):
                             all_emedical_nos.append(str(target_cell.value))
+
         if not found_header:
             logging.warning(f"無法在 {sheet_name} 找到 'eMedical No.' 欄位")
 
@@ -166,14 +167,13 @@ def emedical_cxr_automation(emed_no: str, country: str):
                 wait_until(Text('502 Chest X-Ray Examination: Findings').exists)
                 if not RadioButton('Normal', to_right_of=Text('Findings')).is_selected():
                     click(RadioButton('Normal', to_right_of=Text('Findings')))
-
             else:
                 click(Text('Detailed radiology findings'))
 
                 wait_until(Text('Detailed question').exists)
-                for normal in find_all(RadioButton('Normal')):
-                    if not normal.is_selected():
-                        click(normal)
+                for normal_button in find_all(RadioButton('Normal')):
+                    if not normal_button.is_selected():
+                        click(normal_button)
 
                 if not RadioButton('Absent').is_selected():
                     click(RadioButton('Absent'))
