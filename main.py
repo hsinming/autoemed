@@ -18,7 +18,7 @@
 # nuitka-project: --nofollow-import-to=pandas
 """
 @author: Hsin-ming Chen
-@license: GPL
+@license: MIT
 @file: main.py
 @time: 2025/01/21
 @contact: hsinming.chen@gmail.com
