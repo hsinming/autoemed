@@ -35,7 +35,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 import tkinter as tk
 from tkinter import ttk, filedialog, StringVar, BooleanVar
 
-VERSION = "1.4"
+VERSION = "1.4.1"
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
 MAX_LOGIN_ATTEMPTS = 1
 
@@ -142,7 +142,7 @@ def login_to_emedical(user_id, password, headless):
 
 def emedical_cxr_automation(emed_no: str, country: str):
     """
-    通用的 eMedical 案例處理函數
+    通用的 eMedical 502 Chest X-Ray正常案例自動點選流程處理函數
     根據 country 參數決定是否有額外的步驟
     """
     try:
@@ -178,8 +178,10 @@ def emedical_cxr_automation(emed_no: str, country: str):
                 if not RadioButton('Absent').is_selected():
                     click(RadioButton('Absent'))
 
-                if not RadioButton('No', to_right_of=RadioButton('Not selected')).is_selected():
-                    click(RadioButton('No', to_right_of=RadioButton('Not selected')))
+                if not RadioButton('No',
+                                   to_right_of=RadioButton('Not selected', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?'))).is_selected():
+                    click(RadioButton('No',
+                                      to_right_of=RadioButton('Not selected', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?'))))
 
                 if country == "加拿大":
                     click(Button('Next'))
