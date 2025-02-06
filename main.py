@@ -20,7 +20,7 @@
 @author: Hsin-ming Chen
 @license: MIT
 @file: main.py
-@time: 2025/01/21
+@time: 2025/02/06
 @contact: hsinming.chen@gmail.com
 @software: PyCharm
 """
@@ -35,7 +35,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 import tkinter as tk
 from tkinter import ttk, filedialog, StringVar, BooleanVar
 
-VERSION = "1.4.1"
+VERSION = "1.5"
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
 MAX_LOGIN_ATTEMPTS = 1
 
@@ -140,7 +140,7 @@ def login_to_emedical(user_id, password, headless):
     return False
 
 
-def emedical_cxr_automation(emed_no: str, country: str):
+def emedical_cxr_automation(emed_no: str, country: str) -> bool:
     """
     通用的 eMedical 502 Chest X-Ray正常案例自動點選流程處理函數
     根據 country 參數決定是否有額外的步驟
@@ -148,29 +148,29 @@ def emedical_cxr_automation(emed_no: str, country: str):
     try:
         if not RadioButton('Using Health Case Identifier').is_selected():
             click(RadioButton('Using Health Case Identifier'))
+
         write(emed_no, into=TextField('ID'))
         click(Button('Search'))
-
         wait_until(Text('Select:').exists)
         sleep(1)    #wait for reading status
         click(Button('All'))
         click(Button('Manage Case'))
-
         wait_until(Text('Pre exam: Health case details').exists)
+
         if Text('502 Chest X-Ray Examination').exists():
             click(Text('502 Chest X-Ray Examination'))
 
             # 依國家需求點擊不同的按鈕
             if country == "美國":
                 click(Text('Findings'))
-
                 wait_until(Text('502 Chest X-Ray Examination: Findings').exists)
+
                 if not RadioButton('Normal', to_right_of=Text('Findings')).is_selected():
                     click(RadioButton('Normal', to_right_of=Text('Findings')))
             else:
                 click(Text('Detailed radiology findings'))
-
                 wait_until(Text('Detailed question').exists)
+
                 for normal_button in find_all(RadioButton('Normal')):
                     if not normal_button.is_selected():
                         click(normal_button)
@@ -186,6 +186,7 @@ def emedical_cxr_automation(emed_no: str, country: str):
                 if country == "加拿大":
                     click(Button('Next'))
                     wait_until(Text('Special findings').exists)
+
                     if not RadioButton('None of the following are present').is_selected():
                         click(RadioButton('None of the following are present'))
 
@@ -225,12 +226,14 @@ def emedical_cxr_automation(emed_no: str, country: str):
         logging.info(f"成功處理 ({country}): {emed_no}")
         return True
 
-    except NoSuchElementException:
-        logging.error(f"找不到指定元素，可能是 UI 變更，eMedical No: {emed_no}")
-        return False
-
-    except TimeoutException as e:
-        logging.error(f"查詢超時: {emed_no}, 錯誤: {e}")
+    except (NoSuchElementException, TimeoutException, WebDriverException) as e:
+        logging.error(f"自動化失敗: {emed_no}, 錯誤: {e}")
+        # 嘗試關閉目前的視窗，避免卡住
+        try:
+            if Button('Close').exists() and Button('Close').is_enabled():
+                click(Button('Close'))
+        except Exception:
+            pass
         return False
 
 
@@ -290,9 +293,10 @@ def emedical_workflow(user_id, password, excel_path, update_status, emed_no_list
         emed_no_listbox.itemconfig(index, {'bg': 'blue', 'fg': 'white'})
 
         country = get_country(emed_no)
+        success = False  # 預設為失敗
+
         if country == "未知國家":
             logging.warning(f"未知國家的 eMedical No.: {emed_no}")
-            success = False
         else:
             success = emedical_cxr_automation(emed_no, country)
 
@@ -316,8 +320,8 @@ def emedical_workflow(user_id, password, excel_path, update_status, emed_no_list
 def start_gui():
     root = tk.Tk()
     root.title(f"eMedical Automation v{VERSION} By HsinMing Chen")
-    root.geometry("500x800")  # 預設視窗大小
-    root.minsize(500, 800)  # 最小大小，避免視窗過小
+    root.geometry("500x700")  # 預設視窗大小
+    root.minsize(500, 700)  # 最小大小，避免視窗過小
     root.resizable(True, True)  # 允許調整大小
 
     style = ttk.Style()
