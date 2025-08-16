@@ -1,4 +1,14 @@
+.DS_Store
+.bmad-core/
+.github/chatmodes/
+.idea/
+.vscode/
+.venv/
+.roomodes
 log.txt
+uv.lock
+pyproject.toml
+.python-version
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
