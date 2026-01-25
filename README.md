@@ -1,3 +1,7 @@
+---
+marp: false
+---
+
 # 📌 eMedical 502 Chest X-Ray Automation
 
 ![GitHub Repo Stars](https://img.shields.io/github/stars/hsinming/autoemed?style=social)
