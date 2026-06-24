@@ -3,7 +3,6 @@
 .vscode/
 .venv/
 log.txt
-uv.lock
 .python-version
 
 # Byte-compiled / optimized / DLL files
