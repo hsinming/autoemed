@@ -1,7 +1,3 @@
----
-marp: false
----
-
 # 📌 eMedical 502 Chest X-Ray Automation
 
 ![GitHub Repo Stars](https://img.shields.io/github/stars/hsinming/autoemed?style=social)
@@ -18,44 +14,28 @@ marp: false
 - 📂 批次處理 eMedical No. 並填寫 502 Chest X-Ray 表單
 - 🔍 根據 eMedical No. 前綴自動判別國家（澳大利亞、紐西蘭、加拿大、美國）
 - 📋 GUI 操作介面，便於使用
-- 🚀 `Headless` 模式支援背景執行
 - 📜 自動紀錄日誌以追蹤處理狀況
 
 ---
 
 ## 📦 安裝與使用方式
 
-### 1️⃣ 安裝 Conda 與環境設定
-請確保你的環境已安裝 `conda`，如果尚未安裝，可至 [Miniconda](https://docs.conda.io/en/latest/miniconda.html) 或 [Anaconda](https://www.anaconda.com/) 官方網站下載並安裝。
+### 1️⃣ 安裝 uv 與環境設定
+請確保你的環境已安裝 `uv`，如果尚未安裝，可參考 [uv 官方文件](https://docs.astral.sh/uv/getting-started/installation/) 安裝。
 
-安裝完成後，請使用以下指令來建立 `autoemed` 虛擬環境並安裝所有依賴：
+安裝完成後，執行以下指令同步所有依賴：
 ```bash
-# 建立 Conda 環境
-conda env create -f environment.yml
-
-# 啟動 Conda 環境
-conda activate autoemed
-```
-
-若要確保環境內所有依賴已正確安裝，可執行：
-```bash
-conda list
+uv sync
 ```
 
 ### 2️⃣ 使用
 ```bash
-python main.py  # 啟動 GUI 介面
+uv run python main.py  # 啟動 GUI 介面
 ```
 
-或者使用 Nuitka 打包成獨立執行檔：
-```bash
-python -m nuitka main.py
-```
-
-### 3️⃣ 安裝 Nuitka
-如果尚未安裝 Nuitka，可以使用以下指令安裝：
-```bash
-pip install nuitka
+或者使用 Nuitka 打包成獨立執行檔（Windows）：
+```powershell
+.\build_app.ps1
 ```
 
 ---
@@ -63,11 +43,12 @@ pip install nuitka
 ## 📂 專案結構
 ```
 📁 eMedicalAutomation
-│── 📄 main.py        # 主程式
-│── 📄 environment.yml  # Conda 依賴清單
-│── 📄 README.md      # 本文件
-│── 📄 LICENSE        # 授權協議
-│── 📄 log.txt        # 日誌紀錄
+│── 📄 main.py           # 主程式
+│── 📄 build_app.ps1     # Windows 打包腳本
+│── 📄 pyproject.toml    # 依賴定義
+│── 📄 README.md         # 本文件
+│── 📄 LICENSE           # 授權協議
+│── 📄 log.txt           # 日誌紀錄
 ```
 
 ---

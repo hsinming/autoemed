@@ -1,0 +1,10 @@
+[project]
+name = "autoemed"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "helium>=5.1.1",
+    "openpyxl>=3.1.5",
+]

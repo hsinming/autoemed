@@ -9,8 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Environment Setup
 
 ```bash
-uv sync          # install/sync dependencies (preferred)
-python main.py   # launch the Tkinter GUI
+uv sync                    # install/sync dependencies
+uv run python main.py      # launch the Tkinter GUI
 ```
 
 No test suite and no linter are configured in this project.
@@ -24,7 +24,6 @@ Use the PowerShell script (Windows target; dev environment is macOS):
 ```
 
 All Nuitka flags (`--standalone`, `--mingw64`, icon, output dir, plugins) are embedded as `nuitka-project:` comments at the top of `main.py` and are read automatically by Nuitka. Do not duplicate them in `build_app.ps1`.
-
 ## Architecture
 
 Everything lives in a single file: `main.py`. Four classes wire together sequentially:

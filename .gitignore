@@ -4,7 +4,6 @@
 .venv/
 log.txt
 uv.lock
-pyproject.toml
 .python-version
 
 # Byte-compiled / optimized / DLL files
