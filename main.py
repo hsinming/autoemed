@@ -20,25 +20,25 @@
 @author: Hsin-ming Chen
 @license: MIT
 @file: main.py
-@time: 2025/08/16
+@time: 2026/06/24
 @contact: hsinming.chen@gmail.com
-@software: PyCharm
+@software: Claude Code
 """
 import logging
+import re
 from pathlib import Path
 from time import sleep
 import threading
 from openpyxl import load_workbook
-from helium import start_chrome, write, click, wait_until, find_all, kill_browser, Text, TextField, Button, RadioButton, CheckBox, Alert
+from helium import start_chrome, click, wait_until, find_all, kill_browser, write, Text, TextField, Button, RadioButton, CheckBox, Alert
 from selenium.webdriver import ChromeOptions
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 import tkinter as tk
 from tkinter import ttk, filedialog, StringVar, BooleanVar
 
 # --- Global Constants ---
-VERSION = "1.6"
+VERSION = "1.7.0"
 EMEDICAL_URL = 'https://www.emedical.immi.gov.au/eMedUI/eMedical'
-MAX_LOGIN_ATTEMPTS = 1
 
 # --- Logging Setup ---
 log_file = Path("log.txt")
@@ -120,110 +120,124 @@ class EmedicalWebAutomator:
         self.options.add_argument("--disable-component-update")
         self.options.add_argument("--disable-features=NetworkService,NetworkServiceInProcess")
 
-    def login(self, user_id, password, headless=False):
-        for attempt in range(1, MAX_LOGIN_ATTEMPTS + 1):
-            try:
-                logging.info("Starting browser and logging into eMedical system")
-                start_chrome(self.base_url, headless=headless, options=self.options)
-                write(user_id, into=TextField('User id'))
-                write(password, into=TextField('Password'))
-                click(Button('Logon'))
-                wait_until(Text('Case search').exists, timeout_secs=10)
-                logging.info("Login successful!")
-                return True
-
-            except NoSuchElementException:
-                logging.error("Login fields not found, please check if the page has changed")
-                break
-
-            except TimeoutException:
-                logging.warning(f"Login timed out, attempt {attempt}...")
-                sleep(2)
-
-            except WebDriverException as e:
-                logging.error(f"Browser error: {e}")
-                break
-
-        logging.error("Login failed after multiple attempts, please check your credentials")
-        return False
+    def login(self):
+        try:
+            logging.info("Starting browser, waiting for manual login")
+            start_chrome(self.base_url, options=self.options)
+            wait_until(Text('Case search').exists, timeout_secs=300)
+            logging.info("Login successful!")
+            return True
+        except TimeoutException:
+            logging.error("Timed out waiting for manual login")
+            return False
+        except WebDriverException as e:
+            logging.error(f"Browser error: {e}")
+            return False
 
     def automate_cxr_exam(self, emed_no: str, country: str) -> bool:
+        step = "初始化"
         try:
+            step = "選擇 Health Case Identifier"
             if not RadioButton('Using Health Case Identifier').is_selected():
                 click(RadioButton('Using Health Case Identifier'))
 
+            step = "輸入 ID 並搜尋"
             write(emed_no, into=TextField('ID'))
             click(Button('Search', to_right_of=Button('Reset')))
             wait_until(Text('Select:').exists)
             sleep(1)
+
+            step = "選取 All 並進入 Manage Case"
             click(Button('All'))
             click(Button('Manage Case'))
             wait_until(Text('Pre exam: Health case details').exists)
 
-            if Text('502 Chest X-Ray Examination').exists():
-                click(Text('502 Chest X-Ray Examination'))
+            if not Text('502 Chest X-Ray Examination').exists():
+                logging.warning(f"{emed_no}: 找不到 '502 Chest X-Ray Examination'，跳過")
+                click(Button('Close'))
+                return False
 
-                if country == "美國":
-                    click(Text('Findings'))
-                    wait_until(Text('502 Chest X-Ray Examination: Findings').exists)
-                    if not RadioButton('Normal', to_right_of=Text('Findings')).is_selected():
-                        click(RadioButton('Normal', to_right_of=Text('Findings')))
-                else:
-                    click(Text('Detailed radiology findings'))
-                    wait_until(Text('Detailed question').exists)
-                    for normal_button in find_all(RadioButton('Normal')):
-                        if not normal_button.is_selected():
-                            click(normal_button)
-                    if not RadioButton('Absent').is_selected():
-                        click(RadioButton('Absent'))
-                    if not RadioButton('No',
-                                       to_right_of=RadioButton('Not selected', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?'))).is_selected():
-                        click(RadioButton('No',
-                                          to_right_of=RadioButton('Not selected', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?'))))
-                    if country == "加拿大":
-                        click(Button('Next'))
-                        wait_until(Text('Special findings').exists)
-                        if not RadioButton('None of the following are present').is_selected():
-                            click(RadioButton('None of the following are present'))
+            step = "點選 502 Chest X-Ray Examination"
+            click(Text('502 Chest X-Ray Examination'))
 
-                click(Button('Next'))
-                wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
-                sleep(1)
-                click(Button('Next'))
+            if country == "美國":
+                step = "美國流程：Findings"
+                click(Text('Findings'))
+                wait_until(Text('502 Chest X-Ray Examination: Findings').exists)
+                if not RadioButton('Normal', to_right_of=Text('Findings')).is_selected():
+                    click(RadioButton('Normal', to_right_of=Text('Findings')))
+                logging.debug(f"{emed_no}: Findings = Normal")
+            else:
+                step = "Detailed radiology findings"
+                click(Text('Detailed radiology findings'))
+                wait_until(Text('Detailed question').exists)
 
-                if country == "美國":
-                    wait_until(Text('502 Chest X-Ray Examination: Examiner Declaration').exists)
-                    if Button('Prepare for declaration').exists() and Button('Prepare for declaration').is_enabled():
-                        click(Button('Prepare for declaration'))
-                else:
-                    wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
-                    if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
-                        click(Button('Prepare for grading'))
+                step = "選取所有 Normal"
+                for normal_button in find_all(RadioButton('Normal')):
+                    if not normal_button.is_selected():
+                        click(normal_button)
 
-                wait_until(Text('Examiner declaration').exists)
-                if not CheckBox(
-                        'I declare that the chest X-ray examination report is a true and correct record of my findings.').is_checked():
-                    click(CheckBox(
-                        'I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+                step = "選取 Absent"
+                if not RadioButton('Absent').is_selected():
+                    click(RadioButton('Absent'))
 
-                if country != "美國":
-                    if not RadioButton(
-                            'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.').is_selected():
-                        click(RadioButton(
-                            'A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
+                step = "第 7 題選 No"
+                if not RadioButton('No',
+                                   to_right_of=RadioButton('Not selected', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?'))).is_selected():
+                    click(RadioButton('No',
+                                      to_right_of=RadioButton('Not selected', to_right_of=Text('7. Are there strong suspicions of active Tuberculosis (TB)?'))))
 
-                if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
-                    click(Button('Submit Exam'))
-                    wait_until(Alert().exists)
-                    Alert().accept()
-                    wait_until(Text('Success').exists)
+                if country == "加拿大":
+                    step = "加拿大流程：Special findings"
+                    click(Button('Next'))
+                    wait_until(Text('Special findings').exists)
+                    if not RadioButton('None of the following are present').is_selected():
+                        click(RadioButton('None of the following are present'))
+                    logging.debug(f"{emed_no}: Special findings = None of the following are present")
 
+            step = "Next → Review exam details"
+            click(Button('Next'))
+            wait_until(Text('502 Chest X-Ray Examination: Review exam details').exists)
+            sleep(1)
+
+            step = "Next → Declaration/Grading 頁面"
+            click(Button('Next'))
+
+            if country == "美國":
+                wait_until(Text('502 Chest X-Ray Examination: Examiner Declaration').exists)
+                step = "Prepare for declaration"
+                if Button('Prepare for declaration').exists() and Button('Prepare for declaration').is_enabled():
+                    click(Button('Prepare for declaration'))
+            else:
+                wait_until(Text('502 Chest X-Ray Examination: Grading & Examiner Declaration').exists)
+                step = "Prepare for grading"
+                if Button('Prepare for grading').exists() and Button('Prepare for grading').is_enabled():
+                    click(Button('Prepare for grading'))
+
+            step = "勾選 Examiner declaration"
+            wait_until(Text('Examiner declaration').exists)
+            if not CheckBox('I declare that the chest X-ray examination report is a true and correct record of my findings.').is_checked():
+                click(CheckBox('I declare that the chest X-ray examination report is a true and correct record of my findings.'))
+
+            if country != "美國":
+                step = "選取 Grade A"
+                if not RadioButton('A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.').is_selected():
+                    click(RadioButton('A - No evidence of active TB, or changes consistent with old or inactive TB, or changes suggestive of other significant diseases identified.'))
+
+            step = "Submit Exam"
+            if Button('Submit Exam').exists() and Button('Submit Exam').is_enabled():
+                click(Button('Submit Exam'))
+                wait_until(Alert().exists)
+                Alert().accept()
+                wait_until(Text('Success').exists)
+
+            step = "Close"
             click(Button('Close'))
             logging.info(f"Successfully processed ({country}): {emed_no}")
             return True
 
         except (NoSuchElementException, TimeoutException, WebDriverException) as e:
-            logging.error(f"Automation failed for: {emed_no}, Error: {e}")
+            logging.error(f"Automation failed for: {emed_no} | step: {step} | {type(e).__name__}: {e}")
             try:
                 if Button('Close').exists() and Button('Close').is_enabled():
                     click(Button('Close'))
@@ -255,7 +269,7 @@ class EmedicalWorkflowManager:
         self.update_counts_callback = update_counts
         self.clear_listboxes_callback = clear_listboxes
 
-    def start_workflow(self, user_id, password, excel_path, headless, close_browser):
+    def start_workflow(self, excel_path, close_browser):
         """Start the eMedical automation workflow."""
         if not self.update_status_callback:
             logging.error("GUI update callbacks are not set.")
@@ -279,8 +293,9 @@ class EmedicalWorkflowManager:
             if self.update_emed_no_listbox_callback:
                 self.update_emed_no_listbox_callback(emed_no)
 
-        if not self.web_automator.login(user_id, password, headless):
-            self.update_status_callback("Login failed, please check your credentials")
+        self.update_status_callback("請在瀏覽器中完成登入與認證，等待進入 Case search 頁面…")
+        if not self.web_automator.login():
+            self.update_status_callback("Login failed or timed out")
             return
 
         for index, emed_no in enumerate(emedical_numbers):
@@ -294,13 +309,14 @@ class EmedicalWorkflowManager:
             if self.update_emed_no_listbox_callback:
                 self.update_emed_no_listbox_callback(emed_no, index=index, highlight=True)
 
-            country = self._get_country(emed_no)
+            emed_no_normalized = self._normalize_emed_no(emed_no)
+            country = self._get_country(emed_no_normalized)
             success = False
 
             if country == "未知國家":
                 logging.warning(f"Unknown country for eMedical No.: {emed_no}")
             else:
-                success = self.web_automator.automate_cxr_exam(emed_no, country)
+                success = self.web_automator.automate_cxr_exam(emed_no_normalized, country)
 
             if self.update_emed_no_listbox_callback:
                 self.update_emed_no_listbox_callback(emed_no, index=index, highlight=False)
@@ -321,13 +337,21 @@ class EmedicalWorkflowManager:
         self.update_status_callback("Processing complete!")
         logging.info("Processing complete!")
 
-        if close_browser or headless:
+        if close_browser:
             logging.info("Closing browser")
             kill_browser()
 
     def stop_workflow(self):
         """Trigger the stop event to halt the processing."""
         stop_event.set()
+
+    @staticmethod
+    def _normalize_emed_no(emed_no: str) -> str:
+        """Insert a space between the letter prefix and digits if missing (e.g. HAP47994319 → HAP 47994319)."""
+        normalized = re.sub(r'^([A-Za-z]+)(\d)', r'\1 \2', emed_no.strip())
+        if normalized != emed_no:
+            logging.info(f"Normalized eMedical No.: {emed_no!r} → {normalized!r}")
+        return normalized
 
     def _get_country(self, emed_no):
         """Determine the country based on the eMedical No. prefix."""
@@ -357,10 +381,7 @@ class EmedicalGUI:
         self.workflow_manager = workflow_manager
 
         # Tkinter variables
-        self.user_id_var = StringVar()
-        self.password_var = StringVar()
         self.excel_path_var = StringVar()
-        self.headless_var = BooleanVar()
         self.close_browser_var = BooleanVar()
         self.status_var = StringVar()
 
@@ -403,17 +424,9 @@ class EmedicalGUI:
             main_frame.rowconfigure(i, weight=1)
         main_frame.columnconfigure(0, weight=1)
 
-        # User Login Frame
-        user_frame = ttk.LabelFrame(main_frame, text="User Login", padding=10)
-        user_frame.grid(row=0, column=0, sticky="nsew", pady=5)
-        ttk.Label(user_frame, text="User ID:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        ttk.Entry(user_frame, textvariable=self.user_id_var, width=30).grid(row=0, column=1, padx=5, pady=5)
-        ttk.Label(user_frame, text="Password:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        ttk.Entry(user_frame, textvariable=self.password_var, show='*', width=30).grid(row=1, column=1, padx=5, pady=5)
-
         # Excel File Frame
         file_frame = ttk.LabelFrame(main_frame, text="Excel File", padding=10)
-        file_frame.grid(row=1, column=0, sticky="nsew", pady=5)
+        file_frame.grid(row=0, column=0, sticky="nsew", pady=5)
         file_entry = ttk.Entry(file_frame, textvariable=self.excel_path_var)
         file_entry.grid(row=0, column=0, sticky="ew", padx=5)
         ttk.Button(file_frame, text="Browse", command=self._select_file).grid(row=0, column=1, padx=5, sticky="e")
@@ -421,16 +434,15 @@ class EmedicalGUI:
 
         # Options Frame
         options_frame = ttk.LabelFrame(main_frame, text="Options", padding=10)
-        options_frame.grid(row=2, column=0, sticky="nsew", pady=5)
-        ttk.Checkbutton(options_frame, text="Headless Mode", variable=self.headless_var).grid(row=0, column=0, sticky="w")
-        ttk.Checkbutton(options_frame, text="Kill Browser After Completion", variable=self.close_browser_var).grid(row=1, column=0, sticky="w")
+        options_frame.grid(row=1, column=0, sticky="nsew", pady=5)
+        ttk.Checkbutton(options_frame, text="Kill Browser After Completion", variable=self.close_browser_var).grid(row=0, column=0, sticky="w")
 
         # Status Label
-        ttk.Label(main_frame, textvariable=self.status_var, foreground='blue').grid(row=3, column=0, pady=5, sticky="w")
+        ttk.Label(main_frame, textvariable=self.status_var, foreground='blue').grid(row=2, column=0, pady=5, sticky="w")
 
         # eMedical No. Listbox Frame
         list_frame = ttk.LabelFrame(main_frame, text="eMedical No. 清單", padding=10)
-        list_frame.grid(row=4, column=0, sticky="nsew", pady=5)
+        list_frame.grid(row=3, column=0, sticky="nsew", pady=5)
         self.emed_no_listbox = tk.Listbox(list_frame, height=5)
         emed_no_scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.emed_no_listbox.yview)
         self.emed_no_listbox.config(yscrollcommand=emed_no_scrollbar.set)
@@ -441,7 +453,7 @@ class EmedicalGUI:
 
         # Results Frame
         result_frame = ttk.LabelFrame(main_frame, text="Processing Results", padding=10)
-        result_frame.grid(row=5, column=0, sticky="nsew", pady=5)
+        result_frame.grid(row=4, column=0, sticky="nsew", pady=5)
         self.success_label = ttk.Label(result_frame, text="成功的 eMedical No. (數量: 0)")
         self.success_label.grid(row=0, column=0, sticky="w")
         self.success_listbox = tk.Listbox(result_frame, height=5)
@@ -456,7 +468,7 @@ class EmedicalGUI:
 
         # Button Frame
         button_frame = ttk.Frame(main_frame, padding=10)
-        button_frame.grid(row=6, column=0, sticky="nsew", pady=5)
+        button_frame.grid(row=5, column=0, sticky="nsew", pady=5)
         ttk.Button(button_frame, text="Start", command=self._start_automation_thread).grid(row=0, column=0, sticky="ew")
         ttk.Button(button_frame, text="Stop", command=self._stop_automation).grid(row=0, column=1, sticky="ew")
         button_frame.columnconfigure(0, weight=1)
@@ -469,14 +481,11 @@ class EmedicalGUI:
 
     def _start_automation_thread(self):
         """Start the automation workflow in a separate thread."""
-        user_id = self.user_id_var.get()
-        password = self.password_var.get()
         excel_path = self.excel_path_var.get()
-        headless = self.headless_var.get()
         close_browser = self.close_browser_var.get()
 
-        if not user_id or not password or not excel_path:
-            self.update_status("Please fill in all fields!")
+        if not excel_path:
+            self.update_status("Please select an Excel file!")
             return
 
         self.clear_listboxes()
@@ -485,7 +494,7 @@ class EmedicalGUI:
 
         threading.Thread(
             target=self.workflow_manager.start_workflow,
-            args=(user_id, password, excel_path, headless, close_browser),
+            args=(excel_path, close_browser),
             daemon=True
         ).start()
 
