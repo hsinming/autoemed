@@ -41,7 +41,7 @@ Everything lives in a single file: `main.py`. Four classes wire together sequent
 
 ## Key Constants
 
-- `VERSION` — also mirrored in `version.txt`. Update both when bumping.
+- `VERSION` — version string defined in `main.py`. Update when bumping.
 - `EMEDICAL_URL` — the portal URL; changes require reviewing the Selenium navigation selectors in `automate_cxr_exam`.
 
 ## Code Style Notes
