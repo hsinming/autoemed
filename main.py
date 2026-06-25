@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 
-# nuitka-project: --mingw64
 # nuitka-project: --show-progress
 # nuitka-project: --show-memory
 # nuitka-project: --standalone
