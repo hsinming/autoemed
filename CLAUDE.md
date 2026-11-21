@@ -11,9 +11,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 uv sync                    # install/sync dependencies
 uv run python main.py      # launch the Tkinter GUI
+uv run python scripts/quality_gate.py   # Tester: syntax, lint (ruff E4,E7,E9,F), pytest → .loop/test-report.json
 ```
 
-No test suite and no linter are configured in this project.
+Tests live in `tests/` and never touch the Live Portal (ADR-0002). Import `main` only through the `main_module` fixture, which sets a temp cwd because `main` writes `log.txt` on import.
 
 ## Building a Standalone Executable
 
