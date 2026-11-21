@@ -23,12 +23,14 @@
 @contact: hsinming.chen@gmail.com
 @software: Claude Code
 """
+import json
 import logging
 import re
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from time import sleep
+from datetime import datetime
+from time import monotonic, sleep
 import threading
 from openpyxl import load_workbook
 from helium import start_chrome, click, wait_until, find_all, kill_browser, write, Text, TextField, Button, RadioButton, CheckBox, Alert
@@ -309,15 +311,30 @@ class EmedicalWorkflowManager:
             if self.update_emed_no_listbox_callback:
                 self.update_emed_no_listbox_callback(emed_no)
 
+        # Run Log：每批一個 JSON Lines 檔，放在 log.txt 旁的 run_logs 資料夾
+        started = datetime.now()
+        run_start = monotonic()
+        counts = {"success": 0, "failed": 0, "skipped": 0}
+        stopped_by_user = False
+        run_logs = log_file.parent / "run_logs"
+        run_logs.mkdir(exist_ok=True)
+        self._run_log = run_logs / f"run_{started:%Y%m%d_%H%M%S}.jsonl"
+        self._write_run_log(kind="run_start", version=VERSION, excel_file=Path(excel_path).name,
+                            case_count=len(emedical_numbers), start_time=started.isoformat(timespec="seconds"))
+
         self.update_status_callback("請在瀏覽器中完成登入與認證，等待進入 Case search 頁面…")
         if not self.web_automator.login():
             self.update_status_callback("Login failed or timed out")
+            self._write_run_log(kind="run_end", counts=counts, duration=monotonic() - run_start,
+                                stopped_by_user=False, login_failed=True)
             return
 
         for index, emed_no in enumerate(emedical_numbers):
             if stop_event.is_set():
                 self.update_status_callback("Processing stopped by user")
+                stopped_by_user = True
                 break
+            case_start = monotonic()
 
             self.update_status_callback(f'Processing: {emed_no}')
             logging.info(f'Processing: {emed_no}')
@@ -332,6 +349,13 @@ class EmedicalWorkflowManager:
                 result = CxrResult(False, "初始化", skip_reason="unknown Country")
             else:
                 result = self.web_automator.run_cxr_exam(emed_no_normalized, country)
+
+            outcome = "success" if result.success else "skipped" if result.skip_reason else "failed"
+            counts[outcome] += 1
+            self._write_run_log(kind="case", emed_no=emed_no, country=country, outcome=outcome, step=result.step,
+                                skip_reason=result.skip_reason, error_type=result.error_type,
+                                error_message=result.error_message, traceback=result.traceback,
+                                duration=monotonic() - case_start)
 
             if self.update_emed_no_listbox_callback:
                 self.update_emed_no_listbox_callback(emed_no, index=index, highlight=False)
@@ -349,12 +373,19 @@ class EmedicalWorkflowManager:
         if self.update_counts_callback:
             self.update_counts_callback() # Ensure final counts are updated on GUI
 
+        self._write_run_log(kind="run_end", counts=counts, duration=monotonic() - run_start,
+                            stopped_by_user=stopped_by_user, login_failed=False)
         self.update_status_callback("Processing complete!")
         logging.info("Processing complete!")
 
         if close_browser:
             logging.info("Closing browser")
             kill_browser()
+
+    def _write_run_log(self, **record):
+        """Append one Run Log record; opening per record flushes it so a crash keeps earlier records."""
+        with open(self._run_log, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     def stop_workflow(self):
         """Trigger the stop event to halt the processing."""
