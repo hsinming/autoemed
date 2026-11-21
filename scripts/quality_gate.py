@@ -83,11 +83,24 @@ def gate_tests():
     return {"failures": failures, "tests": tests}
 
 
+def gate_protection():
+    """Fail when the diff of tests/ against HEAD removes or changes an existing line (ADR-0001)."""
+    if subprocess.run(["git", "rev-parse", "-q", "--verify", "HEAD"], capture_output=True).returncode:
+        return {"failures": []}  # no commit yet: no existing test lines to protect
+    failures = []
+    for line in git("diff", "HEAD", "--numstat", "--no-renames", "--", "tests/").splitlines():
+        _added, removed, name = line.split("\t", 2)
+        if removed != "0":  # a changed line counts as removed + added; "-" means a binary change
+            failures.append(failure(name, f"{removed} existing test line(s) removed or changed; only a human may do this"))
+    return {"failures": failures}
+
+
 # Gates run in this order. Add a new Quality Gate by appending (name, fn); fn returns {"failures": [...], ...extra}.
 GATES = [
     ("syntax", gate_syntax),
     ("lint", gate_lint),
     ("tests", gate_tests),
+    ("protection", gate_protection),
 ]
 
 
