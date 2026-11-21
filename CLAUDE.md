@@ -16,6 +16,12 @@ uv run python scripts/quality_gate.py   # Tester: syntax, lint (ruff E4,E7,E9,F)
 
 Tests live in `tests/` and never touch the Live Portal (ADR-0002). Import `main` only through the `main_module` fixture, which sets a temp cwd because `main` writes `log.txt` on import.
 
+## Closed Loop
+
+- **Tester**: `uv run python scripts/quality_gate.py [--report PATH]` runs the Quality Gates (syntax, lint, tests, test protection) and writes the Test Report (default `.loop/test-report.json`). Exit 0 means all gates pass; it is the only proof that code passes (ADR-0001). Test protection fails on any changed or removed line under `tests/` versus `HEAD`: add tests, never edit existing ones.
+- **Commit gate**: a `PreToolUse` hook (`scripts/commit_gate.py`) reruns the Tester on every `git commit` from Claude Code and needs `.loop/review.json` = `{"verdict": "APPROVE", "tree": "<git write-tree of the staged change>", "summary": "..."}`. Commit as: `git add`, then the review verdict, then a separate plain `git commit -m`.
+- **`/dev-loop <issue>`**: runs the Closed Loop on one Ready Issue (`ready-for-agent`): branch `loop/<issue>-<slug>` from `main`, then the `planner`, `developer`, `debugger` and `reviewer` agents in `.claude/agents/`, and ends in a PR into `main` or a Handoff. Run artefacts go in `.loop/` (git-ignored).
+
 ## Building a Standalone Executable
 
 Use the PowerShell script (Windows target; dev environment is macOS):
