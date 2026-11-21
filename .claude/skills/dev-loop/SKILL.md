@@ -37,8 +37,8 @@ Call `developer` with the issue number.
 Set round `r = 0`.
 
 1. Run the Tester: `uv run python scripts/quality_gate.py --report .loop/test-report-<r>.json`. Exit 0 means every Quality Gate passed: go to step 6.
-2. **Stop check** (hook for #8): before each fix round, check the stop conditions in [Stop conditions](#stop-conditions). When one fires, stop → Handoff.
-3. `r = r + 1`. Call `debugger` with round `r` and `.loop/test-report-<r-1>.json`. Go to 1.
+2. **Stop check**: run the checks in [Stop conditions](#stop-conditions) on `.loop/test-report-<r>.json`. When one fires, stop → Handoff.
+3. `r = r + 1`. Call `debugger` with round `r` and `.loop/test-report-<r-1>.json`. When its round in `.loop/attempts.md` has `Root cause: LIVE PORTAL: ...`, stop → Handoff with that line. Otherwise go to 1.
 
 ## 6. Review
 
@@ -66,12 +66,39 @@ Done when the PR exists. Reply with the PR URL and the round count.
 
 ## Stop conditions
 
-Placeholder, filled by #8. Fire on any of:
+Check in this order after a failed Tester run in round `r`; the first that fires is the stop reason:
 
-- 3 fix rounds done (`r == 3`) and the Tester still fails.
-- The same set of failing gate locations in 2 rounds in a row.
-- A change that needs the Live Portal.
+1. **Round limit**: `r == 3`. Reason: `3 fix rounds done and Quality Gates still fail`.
+2. **Stuck**: when `r >= 1`, run `uv run python scripts/stop_check.py .loop/test-report-<r-1>.json .loop/test-report-<r>.json`. Exit 1 means both rounds fail on the same set of (gate, location). Reason: `same failing set in rounds <r-1> and <r>`. The script decides; take its exit code as the answer.
+3. **Live Portal**: the plan verdict (step 3) is `LIVE PORTAL: ...`, or a Debugger round has `Root cause: LIVE PORTAL: ...` (step 5.3): the change needs `EMEDICAL_URL`, a selector or the portal flow (ADR-0002). Reason: that `LIVE PORTAL: ...` line.
+
+Planner `BLOCKED: ...` also stops (step 3), with that line as the reason.
 
 ## Handoff
 
-Placeholder, filled by #8. For now: write `.loop/handoff.md` with the stop reason, the failed gates of the last Test Report and the content of `.loop/attempts.md`; report it to the user and end. Leave the branch as it is.
+1. Write `.loop/handoff.md`:
+
+   ```
+   # Handoff: #<n> <issue title>
+
+   **Stop reason:** <reason>
+   **Branch:** loop/<n>-<slug> (local, not pushed) · **Fix rounds:** <r>
+
+   ## Failed gates
+   - <gate>: <location> — <message>   (one line per failure in the last Test Report)
+
+   ## Last Test Report
+   .loop/test-report-<r>.json · passed: <passed> · tree: <tree>
+   - <gate>: pass|FAIL (<n> failures)   (one line per gate)
+
+   ## Attempts per round
+   <content of .loop/attempts.md, or "None.">
+
+   ## Suggested next step
+   <one or two lines: what a human checks or changes first>
+   ```
+
+   When the loop stopped at the plan, write "No Test Report: stopped at plan." under both gate sections and quote the plan's open questions as the next step.
+2. `gh issue comment <n> --body-file .loop/handoff.md`.
+3. `gh issue edit <n> --remove-label ready-for-agent --add-label ready-for-human`. Step 1 then refuses the issue until a human puts `ready-for-agent` back.
+4. Leave the branch as it is. Reply with the stop reason and the issue URL, and end.

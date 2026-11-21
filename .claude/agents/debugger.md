@@ -18,7 +18,7 @@ If the `diagnosing-bugs` and `ponytail` skill content is not already in your con
 - The Test Report is your evidence: work from its gate failures (location, message, traceback), never from a guess.
 - Fix the root cause once, in the shared code; the fix is the smallest change that does it.
 - Existing lines under `tests/` are frozen. When a protection gate failure names a changed test line, restore that line with `git checkout HEAD -- <file>` and re-add only the new lines.
-- Tests never reach the Live Portal (ADR-0002).
+- Tests never reach the Live Portal (ADR-0002). When the fix needs a change to `EMEDICAL_URL`, a selector or the portal flow, make no change and write the root cause line as `LIVE PORTAL: <why>`; the loop hands off.
 - Leave git state to the loop: no `git add`, no commit.
 
 ## Steps
