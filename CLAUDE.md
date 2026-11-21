@@ -47,3 +47,17 @@ Everything lives in a single file: `main.py`. Four classes wire together sequent
 
 - Comments and log messages are a mix of English and Traditional Chinese (繁體中文) — match the existing style in the surrounding code.
 - `helium` functions (`click`, `write`, `find_all`, etc.) are imported explicitly from `helium`; don't replace with raw Selenium unless helium cannot handle the interaction.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `hsinming/autoemed`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels, plus priority (`P0`–`P2`) and source labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
