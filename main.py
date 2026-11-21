@@ -25,6 +25,8 @@
 """
 import logging
 import re
+import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from time import sleep
 import threading
@@ -104,6 +106,17 @@ class ExcelProcessor:
 
         return all_emedical_nos
 
+@dataclass
+class CxrResult:
+    """Result of one CXR form flow run: success, the last step, and why it was skipped or failed."""
+    success: bool
+    step: str
+    skip_reason: str | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    traceback: str | None = None
+
+
 class EmedicalWebAutomator:
     def __init__(self, base_url):
         self.base_url = base_url
@@ -134,6 +147,9 @@ class EmedicalWebAutomator:
             return False
 
     def automate_cxr_exam(self, emed_no: str, country: str) -> bool:
+        return self.run_cxr_exam(emed_no, country).success
+
+    def run_cxr_exam(self, emed_no: str, country: str) -> CxrResult:
         step = "初始化"
         try:
             step = "選擇 Health Case Identifier"
@@ -154,7 +170,7 @@ class EmedicalWebAutomator:
             if not Text('502 Chest X-Ray Examination').exists():
                 logging.warning(f"{emed_no}: 找不到 '502 Chest X-Ray Examination'，跳過")
                 click(Button('Close'))
-                return False
+                return CxrResult(False, step, skip_reason="missing 502 Chest X-Ray Examination")
 
             step = "點選 502 Chest X-Ray Examination"
             click(Text('502 Chest X-Ray Examination'))
@@ -233,7 +249,7 @@ class EmedicalWebAutomator:
             step = "Close"
             click(Button('Close'))
             logging.info(f"Successfully processed ({country}): {emed_no}")
-            return True
+            return CxrResult(True, step)
 
         except (NoSuchElementException, TimeoutException, WebDriverException) as e:
             logging.error(f"Automation failed for: {emed_no} | step: {step} | {type(e).__name__}: {e}")
@@ -242,7 +258,8 @@ class EmedicalWebAutomator:
                     click(Button('Close'))
             except Exception:
                 pass
-            return False
+            return CxrResult(False, step, error_type=type(e).__name__, error_message=str(e),
+                             traceback="".join(traceback.format_exception(e)))
 
 class EmedicalWorkflowManager:
     """
@@ -310,17 +327,16 @@ class EmedicalWorkflowManager:
 
             emed_no_normalized = self._normalize_emed_no(emed_no)
             country = self._get_country(emed_no_normalized)
-            success = False
-
             if country == "未知國家":
                 logging.warning(f"Unknown country for eMedical No.: {emed_no}")
+                result = CxrResult(False, "初始化", skip_reason="unknown Country")
             else:
-                success = self.web_automator.automate_cxr_exam(emed_no_normalized, country)
+                result = self.web_automator.run_cxr_exam(emed_no_normalized, country)
 
             if self.update_emed_no_listbox_callback:
                 self.update_emed_no_listbox_callback(emed_no, index=index, highlight=False)
 
-            if success:
+            if result.success:
                 if self.update_success_listbox_callback:
                     self.update_success_listbox_callback(emed_no)
             else:
