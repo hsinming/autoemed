@@ -43,14 +43,14 @@ Set round `r = 0`.
 ## 6. Review
 
 1. `git add -A` as its own command (`.loop/` stays out: it is git-ignored).
-2. Call `reviewer` with the issue number. It writes `.loop/review.json` with the tree of the staged change.
+2. Call `reviewer` with the issue number. It reads the staged change with `git diff --cached` (against HEAD) and writes `.loop/review.json` with the tree of the staged change.
 3. Read `.loop/review.json`:
    - `APPROVE`: go to step 7.
    - `REQUEST_CHANGES`: call `developer` with the summary as the changes to make, then go back to step 5 with the next round number. The review counts as a fix round for the stop conditions.
 
 ## 7. Commit
 
-Run `git commit -m "<message>"` as its own command: plain `-m`, never `-a`, never chained after `git add`. The commit gate hook reruns the Tester and checks that `.loop/review.json` is `APPROVE` for the staged tree.
+Run `git commit -m "<message>"` as its own command: plain `-m`, never `-a`, never chained after `git add`. The commit gate hook refuses unstaged changes to tracked files, reruns the Tester and checks that `.loop/review.json` is `APPROVE` for the staged tree.
 
 End the message with `Closes #<n>` and the attribution lines from the session's system reminder.
 

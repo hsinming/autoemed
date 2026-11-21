@@ -27,7 +27,7 @@ A deterministic script, not an agent, that runs the Quality Gates and writes the
 _Avoid_: test agent, QA agent
 
 **Quality Gate**:
-One pass/fail check that must pass before a commit: syntax, lint, tests, or review.
+One pass/fail check that the Tester runs before a commit: syntax, lint, tests, or test protection. The commit gate also checks the review verdict.
 _Avoid_: check, CI step
 
 **Test Report**:

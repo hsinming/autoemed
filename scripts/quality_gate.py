@@ -27,7 +27,7 @@ def failure(location, message, traceback=""):
 
 def gate_syntax():
     """Compile every tracked (or new, not ignored) .py file."""
-    files = git("ls-files", "--cached", "--others", "--exclude-standard", "--", "*.py").split()
+    files = git("ls-files", "--cached", "--others", "--exclude-standard", "--", "*.py").splitlines()
     failures = []
     for name in files:
         path = Path(name)
@@ -50,8 +50,15 @@ def gate_lint():
     except json.JSONDecodeError:
         return {"failures": [failure("ruff", "ruff did not run", proc.stderr)]}
     cwd = Path.cwd()
+
+    def rel(name):
+        try:
+            return Path(name).relative_to(cwd).as_posix()
+        except ValueError:  # e.g. a path ruff resolved differently from cwd
+            return name
+
     return {"failures": [
-        failure(f"{Path(i['filename']).relative_to(cwd).as_posix()}:{i['location']['row']}", f"{i['code']} {i['message']}")
+        failure(f"{rel(i['filename'])}:{i['location']['row']}", f"{i['code']} {i['message']}")
         for i in issues
     ]}
 
@@ -87,8 +94,11 @@ def gate_protection():
     """Fail when the diff of tests/ against HEAD removes or changes an existing line (ADR-0001)."""
     if subprocess.run(["git", "rev-parse", "-q", "--verify", "HEAD"], capture_output=True).returncode:
         return {"failures": []}  # no commit yet: no existing test lines to protect
+    # shortcut: only line diffs count, so an agent can still skip a test by adding a conftest.py hook or a
+    # skip/xfail marker on a new line; upgrade to comparing collected test outcomes against HEAD if that happens.
     failures = []
-    for line in git("diff", "HEAD", "--numstat", "--no-renames", "--", "tests/").splitlines():
+    # --ignore-cr-at-eol: a CRLF-only rewrite (editor or autocrlf) is not a changed test line
+    for line in git("diff", "HEAD", "--numstat", "--no-renames", "--ignore-cr-at-eol", "--", "tests/").splitlines():
         _added, removed, name = line.split("\t", 2)
         if removed != "0":  # a changed line counts as removed + added; "-" means a binary change
             failures.append(failure(name, f"{removed} existing test line(s) removed or changed; only a human may do this"))
@@ -113,7 +123,7 @@ def run(report_path):
         gates.append({"name": name, "passed": not result["failures"], "duration": round(time.perf_counter() - t0, 3), **result})
     report = {
         "passed": all(g["passed"] for g in gates),
-        "tree": git("write-tree").strip(),  # tree hash of the staged state; the commit hook compares this
+        "tree": git("write-tree").strip(),  # tree hash of the staged state, for the reader; the commit gate compares review.json against git write-tree
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "duration": round(time.perf_counter() - start, 3),
         "gates": gates,

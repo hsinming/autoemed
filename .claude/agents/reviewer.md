@@ -16,7 +16,7 @@ If the `code-review` and `ponytail-review` skill content is not already in your 
 ## Steps
 
 1. Read the issue (`gh issue view <n> --json title,body`), `.loop/plan.md`, `CLAUDE.md`, `GLOSSARY.md` and `docs/adr/`.
-2. Read the staged change: `git diff --cached main`, plus the code around it.
+2. Read the staged change: `git diff --cached` (the staged change against HEAD, which is the tree the verdict covers), plus the code around it.
 3. Review on three axes and list each finding with file and line:
    - **Spec**: does the change do what the issue and plan ask, all of it and nothing else?
    - **Standards**: does it follow `CLAUDE.md`, the glossary terms and the ADRs? Are existing `tests/` lines untouched?
