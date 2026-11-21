@@ -33,7 +33,7 @@ def test_clean_repo_passes(git_repo):
     code, report = run_tester(git_repo)
     assert code == 0
     assert report["passed"] is True
-    assert [g["name"] for g in report["gates"]] == ["syntax", "lint", "tests"]
+    assert [g["name"] for g in report["gates"]] == ["syntax", "lint", "tests", "protection"]
     assert all(g["passed"] and g["failures"] == [] for g in report["gates"])
     assert len(report["tree"]) == 40
     assert report["timestamp"] and report["duration"] >= 0
@@ -52,7 +52,7 @@ def test_syntax_error_fails_with_location(git_repo):
     assert failure["location"] == "broken.py:2"
     assert failure["message"]
     # all gates still run after one fails
-    assert [g["name"] for g in report["gates"]] == ["syntax", "lint", "tests"]
+    assert [g["name"] for g in report["gates"]] == ["syntax", "lint", "tests", "protection"]
 
 
 def test_lint_error_fails_with_rule(git_repo):
