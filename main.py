@@ -170,6 +170,38 @@ class EmedicalWebAutomator:
         click(Button('Manage Case'))
         wait_until(Text('Pre exam: Health case details').exists)
 
+    def run_smoke_test(self, emed_no: str) -> CxrResult:
+        """唯讀 Smoke Test：登入、open_case、檢查 502 是否存在、Close。只允許 tests/test_smoke.py 列出的動作。"""
+        if not emed_no.strip():
+            return CxrResult(False, "初始化", error_message="empty eMed No.")
+        emed_no = EmedicalWorkflowManager._normalize_emed_no(emed_no)
+        step = "登入"
+
+        def set_step(name: str) -> None:
+            nonlocal step
+            step = name
+
+        if not self.login():
+            return CxrResult(False, step, error_message="login timed out or browser error")
+        try:
+            self.open_case(emed_no, set_step)
+            step = "檢查 502 Chest X-Ray Examination"
+            if not Text('502 Chest X-Ray Examination').exists():
+                click(Button('Close'))
+                return CxrResult(False, step, skip_reason="missing 502 Chest X-Ray Examination")
+            step = "Close"
+            click(Button('Close'))
+            return CxrResult(True, step)
+        except Exception as e:
+            logging.error(f"Smoke Test failed: {emed_no} | step: {step} | {type(e).__name__}: {e}")
+            try:
+                if Button('Close').exists() and Button('Close').is_enabled():
+                    click(Button('Close'))
+            except Exception:
+                pass
+            return CxrResult(False, step, error_type=type(e).__name__, error_message=str(e),
+                             traceback="".join(traceback.format_exception(e)))
+
     def run_cxr_exam(self, emed_no: str, country: str) -> CxrResult:
         step = "初始化"
 
@@ -608,6 +640,19 @@ class EmedicalGUI:
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--smoke", metavar="EMED_NO", help="read-only Smoke Test on the Live Portal")
+    args = parser.parse_args()
+    if args.smoke is not None:
+        r = EmedicalWebAutomator(EMEDICAL_URL).run_smoke_test(args.smoke)
+        detail = ": ".join(x for x in (r.error_type, r.skip_reason or r.error_message) if x)
+        line = f"{'PASS' if r.success else 'FAIL'} | step: {r.step}" + (f" | {detail}" if detail else "")
+        logging.info(f"Smoke Test: {line}")
+        print(line)
+        sys.exit(0 if r.success else 1)
+
     root = tk.Tk()
     excel_processor = ExcelProcessor()
     web_automator = EmedicalWebAutomator(EMEDICAL_URL)

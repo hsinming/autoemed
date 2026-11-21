@@ -14,6 +14,8 @@ uv run python main.py      # launch the Tkinter GUI
 uv run python scripts/quality_gate.py   # Tester: syntax, lint (ruff E4,E7,E9,F), pytest → .loop/test-report.json
 ```
 
+**Smoke Test** (human only, Live Portal, read-only): `uv run python main.py --smoke "<eMed No.>"`. Log in and complete 2FA in Chrome; it searches the case, opens Manage Case, checks "502 Chest X-Ray Examination" and clicks Close. It prints one `PASS`/`FAIL | step: ...` line and exits 0/1. Never run it from an agent or `/dev-loop` (ADR-0002). `tests/test_smoke.py` guards the allowed actions; adding one needs human review.
+
 Tests live in `tests/` and never touch the Live Portal (ADR-0002). Import `main` only through the `main_module` fixture, which sets a temp cwd because `main` writes `log.txt` on import.
 
 ## Closed Loop
