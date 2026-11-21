@@ -1,0 +1,7 @@
+{
+  "enabledPlugins": {
+    "mattpocock-skills@claude-plugins-official": true,
+    "ponytail@ponytail": true,
+    "asd-ste100@asd-ste100": true
+  }
+}
