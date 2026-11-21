@@ -27,6 +27,7 @@ import json
 import logging
 import re
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
@@ -152,23 +153,32 @@ class EmedicalWebAutomator:
         # 測試相容 shim：#5 的表單流程測試仍呼叫此 bool 介面；workflow 改用 run_cxr_exam
         return self.run_cxr_exam(emed_no, country).success
 
+    def open_case(self, emed_no: str, set_step: Callable[[str], None]) -> None:
+        """搜尋 eMed No. 並進入 Manage Case；表單流程與 Smoke Test 共用。每步先呼叫 set_step 以便失敗時記錄 step。"""
+        set_step("選擇 Health Case Identifier")
+        if not RadioButton('Using Health Case Identifier').is_selected():
+            click(RadioButton('Using Health Case Identifier'))
+
+        set_step("輸入 ID 並搜尋")
+        write(emed_no, into=TextField('ID'))
+        click(Button('Search', to_right_of=Button('Reset')))
+        wait_until(Text('Select:').exists)
+        sleep(1)
+
+        set_step("選取 All 並進入 Manage Case")
+        click(Button('All'))
+        click(Button('Manage Case'))
+        wait_until(Text('Pre exam: Health case details').exists)
+
     def run_cxr_exam(self, emed_no: str, country: str) -> CxrResult:
         step = "初始化"
+
+        def set_step(name: str) -> None:
+            nonlocal step
+            step = name
+
         try:
-            step = "選擇 Health Case Identifier"
-            if not RadioButton('Using Health Case Identifier').is_selected():
-                click(RadioButton('Using Health Case Identifier'))
-
-            step = "輸入 ID 並搜尋"
-            write(emed_no, into=TextField('ID'))
-            click(Button('Search', to_right_of=Button('Reset')))
-            wait_until(Text('Select:').exists)
-            sleep(1)
-
-            step = "選取 All 並進入 Manage Case"
-            click(Button('All'))
-            click(Button('Manage Case'))
-            wait_until(Text('Pre exam: Health case details').exists)
+            self.open_case(emed_no, set_step)
 
             if not Text('502 Chest X-Ray Examination').exists():
                 logging.warning(f"{emed_no}: 找不到 '502 Chest X-Ray Examination'，跳過")
