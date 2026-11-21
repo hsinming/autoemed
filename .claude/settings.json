@@ -3,5 +3,19 @@
     "mattpocock-skills@claude-plugins-official": true,
     "ponytail@ponytail": true,
     "asd-ste100@asd-ste100": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --project \"$CLAUDE_PROJECT_DIR\" python \"$CLAUDE_PROJECT_DIR/scripts/commit_gate.py\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
   }
 }
