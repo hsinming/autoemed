@@ -35,7 +35,7 @@ import threading
 from openpyxl import load_workbook
 from helium import start_chrome, click, wait_until, find_all, kill_browser, write, Text, TextField, Button, RadioButton, CheckBox, Alert
 from selenium.webdriver import ChromeOptions
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 import tkinter as tk
 from tkinter import ttk, filedialog, StringVar, BooleanVar
 
@@ -149,6 +149,7 @@ class EmedicalWebAutomator:
             return False
 
     def automate_cxr_exam(self, emed_no: str, country: str) -> bool:
+        # 測試相容 shim：#5 的表單流程測試仍呼叫此 bool 介面；workflow 改用 run_cxr_exam
         return self.run_cxr_exam(emed_no, country).success
 
     def run_cxr_exam(self, emed_no: str, country: str) -> CxrResult:
@@ -253,7 +254,7 @@ class EmedicalWebAutomator:
             logging.info(f"Successfully processed ({country}): {emed_no}")
             return CxrResult(True, step)
 
-        except (NoSuchElementException, TimeoutException, WebDriverException) as e:
+        except Exception as e:  # 非 Selenium 例外也記為 failed case，批次繼續
             logging.error(f"Automation failed for: {emed_no} | step: {step} | {type(e).__name__}: {e}")
             try:
                 if Button('Close').exists() and Button('Close').is_enabled():
@@ -277,6 +278,7 @@ class EmedicalWorkflowManager:
         self.update_failure_listbox_callback = None
         self.update_counts_callback = None
         self.clear_listboxes_callback = None
+        self._run_log = None
 
     def set_gui_callbacks(self, update_status, update_emed_no_listbox, update_success_listbox, update_failure_listbox, update_counts, clear_listboxes):
         """Set the callback functions for GUI updates."""
@@ -293,14 +295,33 @@ class EmedicalWorkflowManager:
             logging.error("GUI update callbacks are not set.")
             return
 
+        # Run Log：每批一個 JSON Lines 檔，放在 log.txt 旁的 run_logs 資料夾
+        started = datetime.now()
+        run_start = monotonic()
+        counts = {"success": 0, "failed": 0, "skipped": 0}
+        self._run_log = log_file.parent / "run_logs" / f"run_{started:%Y%m%d_%H%M%S}.jsonl"
+
+        def write_run_start(case_count):
+            self._write_run_log(kind="run_start", version=VERSION, excel_file=Path(excel_path).name,
+                                case_count=case_count, start_time=started.isoformat(timespec="seconds"))
+
+        def write_run_end(login_failed=False):
+            # 讀 stop_event 而非迴圈旗標，才能記到最後一筆處理中按下的 Stop
+            self._write_run_log(kind="run_end", counts=counts, duration=monotonic() - run_start,
+                                stopped_by_user=stop_event.is_set(), login_failed=login_failed)
+
         self.update_status_callback(f"Reading eMedical No. from {excel_path}")
         if not Path(excel_path).exists():
             self.update_status_callback(f"Error: File {excel_path} not found")
+            write_run_start(0)
+            write_run_end()
             return
 
         emedical_numbers = self.excel_processor.extract_emedical_no(Path(excel_path))
         if not emedical_numbers:
             self.update_status_callback("No eMedical No. read.")
+            write_run_start(0)
+            write_run_end()
             return
         self.update_status_callback(f"Read {len(emedical_numbers)} eMedical No.")
 
@@ -311,28 +332,17 @@ class EmedicalWorkflowManager:
             if self.update_emed_no_listbox_callback:
                 self.update_emed_no_listbox_callback(emed_no)
 
-        # Run Log：每批一個 JSON Lines 檔，放在 log.txt 旁的 run_logs 資料夾
-        started = datetime.now()
-        run_start = monotonic()
-        counts = {"success": 0, "failed": 0, "skipped": 0}
-        stopped_by_user = False
-        run_logs = log_file.parent / "run_logs"
-        run_logs.mkdir(exist_ok=True)
-        self._run_log = run_logs / f"run_{started:%Y%m%d_%H%M%S}.jsonl"
-        self._write_run_log(kind="run_start", version=VERSION, excel_file=Path(excel_path).name,
-                            case_count=len(emedical_numbers), start_time=started.isoformat(timespec="seconds"))
+        write_run_start(len(emedical_numbers))
 
         self.update_status_callback("請在瀏覽器中完成登入與認證，等待進入 Case search 頁面…")
         if not self.web_automator.login():
             self.update_status_callback("Login failed or timed out")
-            self._write_run_log(kind="run_end", counts=counts, duration=monotonic() - run_start,
-                                stopped_by_user=False, login_failed=True)
+            write_run_end(login_failed=True)
             return
 
         for index, emed_no in enumerate(emedical_numbers):
             if stop_event.is_set():
                 self.update_status_callback("Processing stopped by user")
-                stopped_by_user = True
                 break
             case_start = monotonic()
 
@@ -373,8 +383,7 @@ class EmedicalWorkflowManager:
         if self.update_counts_callback:
             self.update_counts_callback() # Ensure final counts are updated on GUI
 
-        self._write_run_log(kind="run_end", counts=counts, duration=monotonic() - run_start,
-                            stopped_by_user=stopped_by_user, login_failed=False)
+        write_run_end()
         self.update_status_callback("Processing complete!")
         logging.info("Processing complete!")
 
@@ -384,8 +393,12 @@ class EmedicalWorkflowManager:
 
     def _write_run_log(self, **record):
         """Append one Run Log record; opening per record flushes it so a crash keeps earlier records."""
-        with open(self._run_log, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        try:
+            self._run_log.parent.mkdir(exist_ok=True)
+            with open(self._run_log, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:  # Run Log 寫入失敗不可中止批次，只記到 log.txt
+            logging.error(f"Run Log write failed: {type(e).__name__}: {e}")
 
     def stop_workflow(self):
         """Trigger the stop event to halt the processing."""
