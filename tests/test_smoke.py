@@ -52,3 +52,28 @@ def test_smoke_login_failure_fails_without_clicks(portal, automator, monkeypatch
     assert result.success is False
     assert result.step == '登入'
     assert portal.clicks == []
+
+
+def test_smoke_login_exception_fails_at_login_step(portal, automator, monkeypatch):  # noqa: F811
+    def login():
+        raise RuntimeError('chromedriver missing')
+
+    monkeypatch.setattr(automator, 'login', login)
+    result = automator.run_smoke_test('HAP 47994319')
+    assert result.success is False
+    assert result.step == '登入'
+    assert result.error_type == 'RuntimeError'
+
+
+def test_smoke_pass_accepts_no_alert(portal, automator, monkeypatch, main_module):  # noqa: F811
+    accepts = []
+
+    def alert(*a, **k):
+        a = portal.element('Alert')
+        a.accept = lambda: accepts.append('accept')
+        return a
+
+    monkeypatch.setattr(main_module, 'Alert', alert)
+    monkeypatch.setattr(automator, 'login', lambda: True)
+    assert automator.run_smoke_test('HAP 47994319').success is True
+    assert accepts == []

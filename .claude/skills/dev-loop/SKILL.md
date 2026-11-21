@@ -100,7 +100,7 @@ Planner `BLOCKED: ...` also stops (step 3), with that line as the reason.
 
    When the loop stopped at the plan, write "No Test Report: stopped at plan." under both gate sections and quote the plan's open questions as the next step.
 
-   Only when the stop reason is a `LIVE PORTAL: ...` line, append this section. Other stop reasons leave it out. You never run the Smoke Test yourself (ADR-0002); the human runs it.
+   Only when the stop reason contains `LIVE PORTAL:` (for example the Debugger's `Root cause: LIVE PORTAL: ...`), append this section. Other stop reasons leave it out. You never run the Smoke Test yourself (ADR-0002); the human runs it.
 
    ```
    ## Smoke Test (human)
