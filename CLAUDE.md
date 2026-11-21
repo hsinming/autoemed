@@ -66,6 +66,10 @@ Issues live in GitHub Issues for `hsinming/autoemed`, via the `gh` CLI. See `doc
 
 The five default triage labels, plus priority (`P0`–`P2`) and source labels. See `docs/agents/triage-labels.md`.
 
+### Run Log triage
+
+Triage of a Run Log or a user report: grouping, priority, source labels, redaction. See `docs/agents/run-log-triage.md`.
+
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
