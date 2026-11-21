@@ -27,6 +27,7 @@ import json
 import logging
 import re
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
@@ -152,23 +153,68 @@ class EmedicalWebAutomator:
         # 測試相容 shim：#5 的表單流程測試仍呼叫此 bool 介面；workflow 改用 run_cxr_exam
         return self.run_cxr_exam(emed_no, country).success
 
+    def open_case(self, emed_no: str, set_step: Callable[[str], None]) -> None:
+        """搜尋 eMed No. 並進入 Manage Case；表單流程與 Smoke Test 共用。每步先呼叫 set_step 以便失敗時記錄 step。"""
+        set_step("選擇 Health Case Identifier")
+        if not RadioButton('Using Health Case Identifier').is_selected():
+            click(RadioButton('Using Health Case Identifier'))
+
+        set_step("輸入 ID 並搜尋")
+        write(emed_no, into=TextField('ID'))
+        click(Button('Search', to_right_of=Button('Reset')))
+        wait_until(Text('Select:').exists)
+        sleep(1)
+
+        set_step("選取 All 並進入 Manage Case")
+        click(Button('All'))
+        click(Button('Manage Case'))
+        wait_until(Text('Pre exam: Health case details').exists)
+
+    def run_smoke_test(self, emed_no: str) -> CxrResult:
+        """唯讀 Smoke Test：登入、open_case、檢查 502 是否存在、Close。只允許 tests/test_smoke.py 列出的動作。"""
+        if not emed_no.strip():
+            return CxrResult(False, "初始化", error_message="empty eMed No.")
+        emed_no = EmedicalWorkflowManager._normalize_emed_no(emed_no)
+        step = "登入"
+
+        def set_step(name: str) -> None:
+            nonlocal step
+            step = name
+
+        try:
+            if not self.login():
+                return CxrResult(False, step, error_message="login timed out or browser error")
+            self.open_case(emed_no, set_step)
+            step = "檢查 502 Chest X-Ray Examination"
+            if not Text('502 Chest X-Ray Examination').exists():
+                raise LookupError("missing 502 Chest X-Ray Examination")
+            step = "Close"
+            click(Button('Close'))
+            return CxrResult(True, step)
+        except Exception as e:
+            return self._fail("Smoke Test failed", emed_no, step, e)
+
+    @staticmethod
+    def _fail(what: str, emed_no: str, step: str, e: Exception) -> CxrResult:
+        """記錄錯誤、若 Close 存在且可用則關閉 case，回傳 failed CxrResult。"""
+        logging.error(f"{what}: {emed_no} | step: {step} | {type(e).__name__}: {e}")
+        try:
+            if Button('Close').exists() and Button('Close').is_enabled():
+                click(Button('Close'))
+        except Exception:
+            pass
+        return CxrResult(False, step, error_type=type(e).__name__, error_message=str(e),
+                         traceback="".join(traceback.format_exception(e)))
+
     def run_cxr_exam(self, emed_no: str, country: str) -> CxrResult:
         step = "初始化"
+
+        def set_step(name: str) -> None:
+            nonlocal step
+            step = name
+
         try:
-            step = "選擇 Health Case Identifier"
-            if not RadioButton('Using Health Case Identifier').is_selected():
-                click(RadioButton('Using Health Case Identifier'))
-
-            step = "輸入 ID 並搜尋"
-            write(emed_no, into=TextField('ID'))
-            click(Button('Search', to_right_of=Button('Reset')))
-            wait_until(Text('Select:').exists)
-            sleep(1)
-
-            step = "選取 All 並進入 Manage Case"
-            click(Button('All'))
-            click(Button('Manage Case'))
-            wait_until(Text('Pre exam: Health case details').exists)
+            self.open_case(emed_no, set_step)
 
             if not Text('502 Chest X-Ray Examination').exists():
                 logging.warning(f"{emed_no}: 找不到 '502 Chest X-Ray Examination'，跳過")
@@ -255,14 +301,7 @@ class EmedicalWebAutomator:
             return CxrResult(True, step)
 
         except Exception as e:  # 非 Selenium 例外也記為 failed case，批次繼續
-            logging.error(f"Automation failed for: {emed_no} | step: {step} | {type(e).__name__}: {e}")
-            try:
-                if Button('Close').exists() and Button('Close').is_enabled():
-                    click(Button('Close'))
-            except Exception:
-                pass
-            return CxrResult(False, step, error_type=type(e).__name__, error_message=str(e),
-                             traceback="".join(traceback.format_exception(e)))
+            return self._fail("Automation failed for", emed_no, step, e)
 
 class EmedicalWorkflowManager:
     """
@@ -598,6 +637,19 @@ class EmedicalGUI:
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--smoke", metavar="EMED_NO", help="read-only Smoke Test on the Live Portal")
+    args, _ = parser.parse_known_args()  # GUI 啟動時忽略其他 argv
+    if args.smoke is not None:
+        r = EmedicalWebAutomator(EMEDICAL_URL).run_smoke_test(args.smoke)
+        detail = ": ".join(x for x in (r.error_type, r.skip_reason or r.error_message) if x)
+        line = f"{'PASS' if r.success else 'FAIL'} | step: {r.step}" + (f" | {detail}" if detail else "")
+        logging.info(f"Smoke Test: {line}")
+        print(line)
+        sys.exit(0 if r.success else 1)
+
     root = tk.Tk()
     excel_processor = ExcelProcessor()
     web_automator = EmedicalWebAutomator(EMEDICAL_URL)

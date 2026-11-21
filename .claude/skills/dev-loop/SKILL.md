@@ -99,6 +99,17 @@ Planner `BLOCKED: ...` also stops (step 3), with that line as the reason.
    ```
 
    When the loop stopped at the plan, write "No Test Report: stopped at plan." under both gate sections and quote the plan's open questions as the next step.
+
+   Only when the stop reason contains `LIVE PORTAL:` (for example the Debugger's `Root cause: LIVE PORTAL: ...`), append this section. Other stop reasons leave it out. You never run the Smoke Test yourself (ADR-0002); the human runs it.
+
+   ```
+   ## Smoke Test (human)
+   This change touches `EMEDICAL_URL`, a selector or the portal flow. After the fix, run the Smoke Test on the Live Portal:
+
+       uv run python main.py --smoke "<eMed No.>"
+
+   Use an eMed No. that is safe to open. The Smoke Test is read-only, but it opens a real health case.
+   ```
 2. `gh issue comment <n> --body-file .loop/handoff.md`.
 3. `gh issue edit <n> --remove-label ready-for-agent --add-label ready-for-human`. Step 1 then refuses the issue until a human puts `ready-for-agent` back.
 4. Leave the branch as it is. Reply with the stop reason and the issue URL, and end.

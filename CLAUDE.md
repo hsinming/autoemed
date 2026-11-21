@@ -14,6 +14,8 @@ uv run python main.py      # launch the Tkinter GUI
 uv run python scripts/quality_gate.py   # Tester: syntax, lint (ruff E4,E7,E9,F), pytest → .loop/test-report.json
 ```
 
+**Smoke Test** (human only, Live Portal, read-only): `uv run python main.py --smoke "<eMed No.>"`. Log in and complete 2FA in Chrome; it searches the case, opens Manage Case, checks "502 Chest X-Ray Examination" and clicks Close. It prints one `PASS`/`FAIL | step: ...` line and exits 0/1. Never run it from an agent or `/dev-loop` (ADR-0002). `tests/test_smoke.py` guards the allowed actions; adding one needs human review.
+
 Tests live in `tests/` and never touch the Live Portal (ADR-0002). Import `main` only through the `main_module` fixture, which sets a temp cwd because `main` writes `log.txt` on import.
 
 ## Closed Loop
@@ -38,7 +40,7 @@ Everything lives in a single file: `main.py`. Four classes wire together sequent
 
 - **`ExcelProcessor`** — reads `.xlsx`, finds `"eMedical No."` column, filters out highlighted/colored rows (immigration clinic color-codes rows to skip), returns a plain list of case ID strings.
 
-- **`EmedicalWebAutomator`** — wraps Helium/Selenium. `login()` opens Chrome, navigates to `EMEDICAL_URL`, and waits up to 300 seconds for the user to complete manual login and email-based 2FA until "Case search" appears. `run_cxr_exam(emed_no, country)` navigates the portal form and returns a `CxrResult` (success, last step, skip reason or error type, message and traceback); any exception becomes a failed result. `automate_cxr_exam` is only a bool wrapper kept for the #5 form-flow tests. **Country determines form flow**: Australia/NZ/Canada use a "Detailed radiology findings" multi-step path; USA (`CEAC` prefix) uses a simpler "Findings" path. Each step updates a `step` variable so failures log exactly where they occurred.
+- **`EmedicalWebAutomator`** — wraps Helium/Selenium. `login()` opens Chrome, navigates to `EMEDICAL_URL`, and waits up to 300 seconds for the user to complete manual login and email-based 2FA until "Case search" appears. `run_cxr_exam(emed_no, country)` navigates the portal form and returns a `CxrResult` (success, last step, skip reason or error type, message and traceback); any exception becomes a failed result. `automate_cxr_exam` is only a bool wrapper kept for the #5 form-flow tests. `open_case(emed_no, set_step)` holds the search-and-Manage-Case steps shared by `run_cxr_exam` and `run_smoke_test`; `run_smoke_test(emed_no)` is the read-only Smoke Test behind `--smoke` (login, `open_case`, check 502, Close) and returns a `CxrResult`. **Country determines form flow**: Australia/NZ/Canada use a "Detailed radiology findings" multi-step path; USA (`CEAC` prefix) uses a simpler "Findings" path. Each step updates a `step` variable so failures log exactly where they occurred.
 
 - **`EmedicalWorkflowManager`** — orchestrates the full batch: reads Excel → populates GUI → opens browser for manual login → loops over case IDs → calls `run_cxr_exam` → tracks success/failure and writes a Run Log (`run_logs/*.jsonl` next to `log.txt`). Before processing each ID, `_normalize_emed_no()` inserts a space between the letter prefix and digits if missing (e.g. `HAP47994319` → `HAP 47994319`), which is the format the eMedical portal accepts. Country is detected from the normalized ID prefix (`HAP`/`TRN` → Australia, `NZER`/`NZHR` → NZ, `IME`/`UMI`/`UCI` → Canada, `CEAC` → USA). Decoupled from GUI via `set_gui_callbacks(...)`. Respects `stop_event` (a `threading.Event`) to allow mid-batch cancellation.
 
